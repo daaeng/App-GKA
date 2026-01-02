@@ -1,0 +1,281 @@
+import Heading from '@/components/heading';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import AppLayout from '@/layouts/app-layout';
+import { type BreadcrumbItem } from '@/types';
+import { Head, router } from '@inertiajs/react';
+import {
+    Area,
+    AreaChart,
+    Bar,
+    BarChart,
+    CartesianGrid,
+    Cell,
+    Legend,
+    Pie,
+    PieChart,
+    ResponsiveContainer,
+    Tooltip,
+    XAxis,
+    YAxis,
+} from 'recharts';
+import {
+    Activity,
+    Archive,
+    Box,
+    Calendar,
+    CreditCard,
+    DollarSign,
+    FileClock,
+    Filter,
+    LayoutDashboard,
+    TrendingUp,
+    Truck,
+    Users,
+    Wallet,
+    Zap,
+} from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+
+// --- Konfigurasi ---
+const breadcrumbs: BreadcrumbItem[] = [
+    { title: 'Dashboard', href: '/dashboard' },
+];
+
+const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
+
+// --- Helper Functions ---
+const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+    }).format(value);
+};
+
+const formatCompactNumber = (number: number) => {
+    return Intl.NumberFormat('id-ID', {
+        notation: "compact",
+        maximumFractionDigits: 1
+    }).format(number);
+};
+
+// --- Component StatCard ---
+const StatCard = ({ icon: Icon, title, value, subtitle, color }: any) => {
+    const themes: any = {
+        emerald: { bg: "hover:border-emerald-500/50", icon: "bg-emerald-500", text: "text-emerald-500" },
+        blue: { bg: "hover:border-blue-500/50", icon: "bg-blue-500", text: "text-blue-500" },
+        rose: { bg: "hover:border-rose-500/50", icon: "bg-rose-500", text: "text-rose-500" },
+        amber: { bg: "hover:border-amber-500/50", icon: "bg-amber-500", text: "text-amber-500" },
+        violet: { bg: "hover:border-violet-500/50", icon: "bg-violet-500", text: "text-violet-500" },
+        pink: { bg: "hover:border-pink-500/50", icon: "bg-pink-500", text: "text-pink-500" },
+        orange: { bg: "hover:border-orange-500/50", icon: "bg-orange-500", text: "text-orange-500" },
+        indigo: { bg: "hover:border-indigo-500/50", icon: "bg-indigo-500", text: "text-indigo-500" },
+    };
+
+    const t = themes[color] || themes.blue;
+
+    return (
+        <div className={`relative group rounded-2xl bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 transition-all duration-300 ${t.bg} hover:shadow-lg`}>
+            <div className="p-6">
+                <div className="flex justify-between items-start mb-4">
+                    <div className={`p-3 rounded-xl ${t.icon} text-white shadow-md`}>
+                        <Icon className="w-6 h-6" />
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-1 rounded-full bg-gray-50 dark:bg-gray-800 uppercase tracking-wider ${t.text}`}>
+                        Metric
+                    </span>
+                </div>
+                <div className="space-y-1">
+                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{title}</p>
+                    <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{value}</h3>
+                </div>
+                <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                    <p className="text-xs text-gray-400 font-medium truncate max-w-[150px]">{subtitle}</p>
+                    <Activity className={`w-4 h-4 ${t.text}`} />
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default function Dashboard({
+    hsl_tsa,
+    hsl_beli,
+    totalPendingRequests,
+    stok_gka,
+    jml_penoreh,
+    jml_pegawai,
+    totalPendingNota,
+    totalRevenueAmount,
+    filter,
+    monthlyData,
+    monthlyRevenueData,
+    qualityDistribution,
+    topIncisorRevenue,
+    chartYear, // [BARU] Menerima tahun chart dari controller
+}: any) {
+    const [timePeriod, setTimePeriod] = useState(filter?.time_period || 'this-month');
+    const [selectedMonth, setSelectedMonth] = useState(filter?.month || '');
+    const [selectedYear, setSelectedYear] = useState(filter?.year || '');
+
+    const currentYear = new Date().getFullYear();
+    const months = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: new Date(0, i).toLocaleString('id-ID', { month: 'short' }) }));
+    const years = Array.from({ length: 5 }, (_, i) => ({ value: (currentYear - i).toString(), label: (currentYear - i).toString() }));
+
+    useEffect(() => {
+        setTimePeriod(filter?.time_period || 'this-month');
+    }, [filter]);
+
+    const handleFilterChange = (newFilter: any) => {
+        router.get(route('dashboard'), { ...filter, ...newFilter }, { preserveState: true, replace: true });
+    };
+
+    return (
+        <AppLayout breadcrumbs={breadcrumbs}>
+            <Head title="Dashboard" />
+
+            <div className="min-h-screen bg-gray-50/50 dark:bg-black py-8">
+                <div className="w-full px-4 sm:px-6 lg:px-8 space-y-8">
+
+                    {/* 1. Header Section */}
+                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white dark:bg-zinc-900 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-zinc-800">
+                        <div>
+                            <div className="flex items-center gap-3 mb-1">
+                                <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                                    <LayoutDashboard className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+                                </div>
+                                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Business Command Center</h1>
+                            </div>
+                            <p className="text-sm text-gray-500 pl-11">Ringkasan performa bisnis PT. Garuda Karya Amanat.</p>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Select value={timePeriod} onValueChange={(val) => { setTimePeriod(val); if(val !== 'custom') handleFilterChange({ time_period: val }); }}>
+                                <SelectTrigger className="w-[150px] bg-white dark:bg-black"><SelectValue placeholder="Periode" /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="this-month">Bulan Ini</SelectItem>
+                                    <SelectItem value="last-month">Bulan Lalu</SelectItem>
+                                    <SelectItem value="this-year">Tahun Ini</SelectItem>
+                                    <SelectItem value="all-time">Semua Data</SelectItem>
+                                    <SelectItem value="custom">Custom...</SelectItem>
+                                </SelectContent>
+                            </Select>
+
+                            {timePeriod === 'custom' && (
+                                <>
+                                    <Select value={selectedMonth} onValueChange={(val) => { setSelectedMonth(val); handleFilterChange({ month: val, time_period: 'custom' }); }}>
+                                        <SelectTrigger className="w-[100px] bg-white"><SelectValue placeholder="Bln" /></SelectTrigger>
+                                        <SelectContent>{months.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                    <Select value={selectedYear} onValueChange={(val) => { setSelectedYear(val); handleFilterChange({ year: val, time_period: 'custom' }); }}>
+                                        <SelectTrigger className="w-[100px] bg-white"><SelectValue placeholder="Thn" /></SelectTrigger>
+                                        <SelectContent>{years.map((y) => <SelectItem key={y.value} value={y.value}>{y.label}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* 2. Stat Cards Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+                        {/* [UPDATE] Judul Card Pendapatan */}
+                        <StatCard title="Pendapatan Penjualan Karet" value={formatCurrency(totalRevenueAmount || 0)} subtitle="Akumulasi Penjualan" icon={DollarSign} color="emerald" />
+                        <StatCard title="Produksi Karet" value={`${formatCompactNumber(hsl_tsa)} Kg`} subtitle="Total Output TSA" icon={Box} color="blue" />
+                        <StatCard title="Stok Terjual" value={`${formatCompactNumber(stok_gka)} Kg`} subtitle="Shipment ke Buyer" icon={Truck} color="amber" />
+                        <StatCard title="Total Pengeluaran" value={formatCurrency(hsl_beli || 0)} subtitle="Pembelian Karet" icon={Wallet} color="pink" />
+
+                        <StatCard title="Pengajuan Pending" value={`${totalPendingRequests}`} subtitle="Menunggu Persetujuan" icon={Archive} color="rose" />
+                        <StatCard title="Nota Pending" value={formatCurrency(totalPendingNota || 0)} subtitle="Menunggu Konfirmasi" icon={FileClock} color="orange" />
+                        <StatCard title="Total Penoreh" value={`${jml_penoreh}`} subtitle="Tenaga Kerja Aktif" icon={Users} color="violet" />
+                        <StatCard title="System Users" value={`${jml_pegawai}`} subtitle="Pengguna Terdaftar" icon={CreditCard} color="indigo" />
+                    </div>
+
+                    {/* 3. Charts Section */}
+                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+
+                        {/* Revenue Chart */}
+                        <Card className="xl:col-span-2 shadow-sm border border-gray-200 dark:border-zinc-800">
+                            <CardHeader>
+                                {/* [UPDATE] Tambah info Tahun di judul grafik */}
+                                <CardTitle className="flex items-center gap-2">
+                                    <TrendingUp className="w-5 h-5 text-emerald-500" /> Tren Pendapatan Penjualan ({chartYear})
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="h-[350px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={monthlyRevenueData}>
+                                        <defs>
+                                            <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                                                <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                        <XAxis dataKey="name" axisLine={false} tickLine={false} />
+                                        <YAxis axisLine={false} tickLine={false} tickFormatter={(val) => `${val/1000000}M`} />
+                                        <Tooltip formatter={(value: number) => [formatCurrency(value), 'Pendapatan']} />
+                                        <Area type="monotone" dataKey="value" stroke="#10b981" fillOpacity={1} fill="url(#colorRevenue)" />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+
+                        {/* Production Mix Chart */}
+                        <Card className="xl:col-span-1 shadow-sm border border-gray-200 dark:border-zinc-800">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Zap className="w-5 h-5 text-blue-500" /> Produksi: Temadu vs Sebayar
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="h-[350px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={monthlyData} layout="vertical">
+                                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                                        <XAxis type="number" hide />
+                                        <YAxis dataKey="name" type="category" width={40} axisLine={false} tickLine={false} />
+                                        <Tooltip cursor={{fill: 'transparent'}} formatter={(value: number) => [formatCompactNumber(value) + ' Kg']} />
+                                        <Legend verticalAlign="bottom" />
+                                        <Bar dataKey="temadu" name="Temadu" stackId="a" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+                                        <Bar dataKey="sebayar" name="Sebayar" stackId="a" fill="#6366f1" radius={[0, 4, 4, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* 4. Top Penoreh Chart (Baru) */}
+                    <div className="grid grid-cols-1 gap-6">
+                        <Card className="shadow-sm border border-gray-200 dark:border-zinc-800">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Users className="w-5 h-5 text-violet-500" /> Top 5 Penoreh Terproduktif (Kg)
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="h-[300px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={topIncisorRevenue} layout="vertical">
+                                        <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                                        <XAxis type="number" hide />
+                                        <YAxis dataKey="name" type="category" width={150} tick={{fontSize: 12}} />
+                                        <Tooltip cursor={{fill: 'transparent'}} formatter={(value: number) => [formatCompactNumber(value) + ' Kg']} />
+                                        <Bar dataKey="qty_karet" name="Hasil Toreh (Kg)" fill="#8b5cf6" radius={[0, 4, 4, 0]} barSize={20} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                </div>
+            </div>
+        </AppLayout>
+    );
+}
