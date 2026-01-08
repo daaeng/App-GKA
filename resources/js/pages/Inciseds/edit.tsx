@@ -7,27 +7,29 @@ import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/react';
-import { CircleAlert, Undo2, Save, Calculator } from 'lucide-react';
 import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import { useEffect, useState } from 'react';
+    Box,
+    Calendar,
+    CircleAlert,
+    FileText,
+    MapPin,
+    Package,
+    Tag,
+    TrendingUp,
+    Undo2,
+    User,
+    Percent,
+    Calculator,
+    Save,
+    Coins
+} from 'lucide-react';
+import React, { useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 
 const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Incised',
-        href: '/inciseds',
-    },
+    { title: 'Incised', href: route('inciseds.index') },
+    { title: 'Edit Data', href: '#' }
 ];
 
 interface NoInvoiceWithName {
@@ -35,7 +37,6 @@ interface NoInvoiceWithName {
     name: string;
 }
 
-// [TAMBAHAN] Interface Master Product
 interface MasterProduct {
     id: number;
     name: string;
@@ -60,23 +61,32 @@ interface Incised {
     };
 }
 
-const FormItem = ({
+// Helper Component untuk Input
+const FormInput = ({
+    id,
     label,
-    children,
+    icon: Icon,
     error,
+    children,
+    className = ""
 }: {
+    id: string;
     label: string;
-    children: React.ReactNode;
+    icon: React.ElementType;
     error?: string;
+    children: React.ReactNode;
+    className?: string;
 }) => (
-    <div className="space-y-2">
-        <Label htmlFor={label}>{label}</Label>
+    <div className={`space-y-1.5 ${className}`}>
+        <Label htmlFor={id} className="flex items-center text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            <Icon className="w-3.5 h-3.5 mr-1.5" />
+            {label}
+        </Label>
         {children}
-        {error && <p className="text-red-600 text-sm mt-1">{error}</p>}
+        {error && <p className="text-xs text-red-500 font-medium mt-1 animate-pulse">{error}</p>}
     </div>
 );
 
-// [UPDATE] Tambahkan masterProducts ke props
 export default function EditIncised({
     incised,
     noInvoicesWithNames,
@@ -98,277 +108,301 @@ export default function EditIncised({
         amount: incised.amount,
         keping: incised.keping,
         kualitas: incised.kualitas || '',
+        percentage: '0.4', // Default state untuk toggle (bisa diubah user)
     });
 
-    const [selectedIncisorName, setSelectedIncisorName] = useState(
-        incised.incisor?.name || 'N/A',
-    );
-
-    const calculateAmount = () => {
-        const qty = Number(data.qty_kg) || 0;
-        const price = Number(data.price_qty) || 0;
-        const totalAmount = qty * price * 0.4;
-        setData('amount', totalAmount);
-    };
-
+    // Perhitungan otomatis saat user mengetik
     useEffect(() => {
-        const selected = noInvoicesWithNames.find(
-            (item) => item.no_invoice === data.no_invoice,
-        );
-        setSelectedIncisorName(selected ? selected.name : 'N/A');
-    }, [data.no_invoice, noInvoicesWithNames]);
+        const qty = parseFloat(String(data.qty_kg));
+        const price = parseFloat(String(data.price_qty));
+        const percent = parseFloat(data.percentage);
+
+        // Hanya hitung ulang jika semua angka valid
+        // NOTE: Saat load pertama, ini mungkin akan menimpa amount database jika rumus cocok.
+        // Jika ingin amount database tetap utuh sampai user edit, kita bisa tambah logic pengecekan.
+        // Tapi untuk konsistensi data (agar selalu sesuai rumus), auto-calc lebih aman.
+        if (!isNaN(qty) && !isNaN(price) && !isNaN(percent)) {
+            const calculatedAmount = qty * price * percent;
+            setData('amount', Number(calculatedAmount.toFixed(0)));
+        }
+    }, [data.qty_kg, data.price_qty, data.percentage]);
 
     const handleUpdate = (e: React.FormEvent) => {
         e.preventDefault();
         put(route('inciseds.update', incised.id));
     };
 
+    // Styles
+    const inputClassName = "h-11 bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-700 focus:ring-2 focus:ring-indigo-500/20 transition-all";
+    const selectClassName = "flex h-11 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:ring-offset-zinc-950 dark:placeholder:text-zinc-400";
+
+    const formatRupiah = (val: number) => {
+        if (isNaN(val)) return 'Rp 0';
+        return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(val);
+    }
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Edit Incised" />
+            <Head title="Edit Data Harian" />
 
-            <div className="h-full flex-col p-4 bg-gray-50 dark:bg-black">
-                <div className="flex justify-between items-center mb-4">
-                    <Heading title="Edit Data Harian Penoreh" />
-                    <Link href={route('inciseds.index')}>
-                        <Button variant="outline">
-                            <Undo2 className="w-4 h-4 mr-2" />
-                            Back
-                        </Button>
-                    </Link>
-                </div>
+            <div className="min-h-screen bg-slate-50/50 dark:bg-black p-4 md:p-8">
+                <form onSubmit={handleUpdate} className="max-w-6xl mx-auto space-y-6">
 
-                {Object.keys(errors).length > 0 && (
-                    <Alert variant="destructive" className="mb-4">
-                        <CircleAlert className="h-4 w-4" />
-                        <AlertTitle>Errors...!</AlertTitle>
-                        <AlertDescription>
-                            <ul>
-                                {Object.entries(errors).map(([key, message]) => (
-                                    <li key={key}>{message as string}</li>
-                                ))}
-                            </ul>
-                        </AlertDescription>
-                    </Alert>
-                )}
+                    {/* Header */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <Heading
+                                title="Edit Hasil Toreh"
+                                description={`Memperbarui data transaksi #${incised.id}`}
+                            />
+                        </div>
+                        <div className="flex gap-3">
+                            <Link href={route('inciseds.index')}>
+                                <Button type="button" variant="outline" className="gap-2 bg-white dark:bg-zinc-900">
+                                    <Undo2 className="h-4 w-4" /> Batal
+                                </Button>
+                            </Link>
+                            <Button type="submit" disabled={processing} className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/20">
+                                <Save className="h-4 w-4" />
+                                {processing ? 'Menyimpan...' : 'Simpan Perubahan'}
+                            </Button>
+                        </div>
+                    </div>
 
-                <form onSubmit={handleUpdate} className="space-y-6">
+                    {Object.keys(errors).length > 0 && (
+                        <Alert variant="destructive" className="bg-red-50 border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-900 dark:text-red-200">
+                            <CircleAlert className="h-4 w-4" />
+                            <AlertTitle>Validasi Gagal</AlertTitle>
+                            <AlertDescription>Mohon periksa kembali inputan Anda.</AlertDescription>
+                        </Alert>
+                    )}
+
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        {/* === KOLOM KIRI (Info Utama & Detail) === */}
-                        <div className="lg:col-span-2 space-y-6">
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Informasi Utama</CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-                                        {/* [PERBAIKAN] Pilihan Product dari Database */}
-                                        <FormItem label="Product" error={errors.product}>
-                                            <Select
-                                                value={data.product}
-                                                onValueChange={(value) => setData('product', value)}
-                                                required
-                                            >
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Pilih Jenis Product" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {masterProducts.map((mp) => (
-                                                        <SelectItem key={mp.id} value={mp.name}>
-                                                            {mp.name} {mp.code ? `(${mp.code})` : ''}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </FormItem>
-
-                                        <FormItem label="Tanggal" error={errors.date}>
-                                            <Input
-                                                type="date"
-                                                value={data.date}
-                                                onChange={(e) => setData('date', e.target.value)}
-                                            />
-                                        </FormItem>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <FormItem label="Kode Penoreh" error={errors.no_invoice}>
-                                            <Select
-                                                value={data.no_invoice}
-                                                onValueChange={(value) => setData('no_invoice', value)}
-                                                required
-                                            >
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Pilih Kode Penoreh" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {noInvoicesWithNames.length > 0 ? (
-                                                        noInvoicesWithNames.map((item, index) => (
-                                                            <SelectItem key={index} value={item.no_invoice}>
-                                                                {`${item.no_invoice} - ${item.name}`}
-                                                            </SelectItem>
-                                                        ))
-                                                    ) : (
-                                                        <SelectItem value="" disabled>
-                                                            Tidak ada data
-                                                        </SelectItem>
-                                                    )}
-                                                </SelectContent>
-                                            </Select>
-                                        </FormItem>
-
-                                        <FormItem label="Nama Penoreh">
-                                            <Input
-                                                value={selectedIncisorName}
-                                                readOnly
-                                                className="bg-gray-100 dark:bg-gray-800 cursor-not-allowed"
-                                            />
-                                        </FormItem>
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Detail Barang & Lokasi</CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <FormItem label="Lokasi Kebun" error={errors.lok_kebun}>
-                                        <Select
-                                            value={data.lok_kebun}
-                                            onValueChange={(value) => setData('lok_kebun', value)}
+                        {/* KOLOM KIRI: Data Produksi */}
+                        <Card className="lg:col-span-2 shadow-sm border-t-4 border-t-indigo-500">
+                            <CardHeader className="bg-slate-50/50 dark:bg-zinc-900/50 border-b border-slate-100 dark:border-zinc-800 pb-4">
+                                <CardTitle className="flex items-center text-lg text-indigo-900 dark:text-indigo-100">
+                                    <Box className="w-5 h-5 mr-2 text-indigo-500" />
+                                    Data Produksi
+                                </CardTitle>
+                                <CardDescription>Informasi detail barang dan penoreh.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-6 pt-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <FormInput id="product" label="Kategori Produk" icon={Box} error={errors.product}>
+                                        <select
+                                            id="product"
+                                            value={data.product}
+                                            onChange={(e) => setData('product', e.target.value)}
+                                            className={selectClassName}
                                             required
                                         >
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Pilih Lokasi" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="Temadu">Temadu</SelectItem>
-                                                <SelectItem value="Sebayar">Sebayar</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </FormItem>
+                                            <option value="" disabled>-- Pilih Produk --</option>
+                                            {masterProducts.map((mp) => (
+                                                <option key={mp.id} value={mp.name}>{mp.name} {mp.code ? `(${mp.code})` : ''}</option>
+                                            ))}
+                                        </select>
+                                    </FormInput>
 
-                                    <FormItem label="Jenis Barang" error={errors.j_brg}>
+                                    <FormInput id="date" label="Tanggal Transaksi" icon={Calendar} error={errors.date}>
                                         <Input
-                                            placeholder="cth: Karet Mingguan, Kelapa Butir, dll."
-                                            value={data.j_brg}
-                                            onChange={(e) => setData('j_brg', e.target.value)}
+                                            id="date"
+                                            type="date"
+                                            value={data.date}
+                                            onChange={(e) => setData('date', e.target.value)}
+                                            className={inputClassName}
+                                            required
                                         />
-                                    </FormItem>
+                                    </FormInput>
+                                </div>
 
-                                    <FormItem label="Description" error={errors.desk}>
-                                        <Textarea
-                                            placeholder="Deskripsi tambahan jika ada..."
-                                            value={data.desk}
-                                            onChange={(e) => setData('desk', e.target.value)}
-                                        />
-                                    </FormItem>
-                                </CardContent>
-                            </Card>
-                        </div>
+                                <div className="p-4 bg-indigo-50/50 dark:bg-indigo-900/10 rounded-xl border border-indigo-100 dark:border-indigo-900/50 space-y-4">
+                                    <FormInput id="no_invoice" label="Identitas Penoreh" icon={User} error={errors.no_invoice}>
+                                        <select
+                                            id="no_invoice"
+                                            value={data.no_invoice}
+                                            onChange={(e) => setData('no_invoice', e.target.value)}
+                                            className={`${selectClassName} font-medium`}
+                                            required
+                                        >
+                                            <option value="" disabled>-- Cari Nama / Invoice --</option>
+                                            {noInvoicesWithNames.length > 0 ? (
+                                                noInvoicesWithNames.map((item, index) => (
+                                                    <option key={index} value={item.no_invoice}>
+                                                        {item.name} — ({item.no_invoice})
+                                                    </option>
+                                                ))
+                                            ) : (
+                                                <option value="" disabled>Data penoreh kosong</option>
+                                            )}
+                                        </select>
+                                    </FormInput>
 
-                        {/* === KOLOM KANAN (Rincian Pemasukan) === */}
-                        <div className="lg:col-span-1">
-                            <Card className="h-full">
-                                <CardHeader className="bg-gray-50/50 dark:bg-gray-800/50 border-b pb-4">
-                                    <CardTitle className="flex items-center gap-2">
-                                        <Calculator className="w-5 h-5 text-emerald-600" />
-                                        Rincian Pemasukan
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <FormInput id="lok_kebun" label="Lokasi Kebun" icon={MapPin} error={errors.lok_kebun}>
+                                            <select
+                                                id="lok_kebun"
+                                                value={data.lok_kebun}
+                                                onChange={(e) => setData('lok_kebun', e.target.value)}
+                                                className={selectClassName}
+                                                required
+                                            >
+                                                <option value="" disabled>-- Pilih Lokasi --</option>
+                                                <option value="Temadu">Temadu</option>
+                                                <option value="Sebayar">Sebayar</option>
+                                            </select>
+                                        </FormInput>
+
+                                        <FormInput id="j_brg" label="Jenis Barang" icon={Tag} error={errors.j_brg}>
+                                            <Input
+                                                id="j_brg"
+                                                placeholder="Contoh: Karet Keping / Lump"
+                                                value={data.j_brg}
+                                                onChange={(e) => setData('j_brg', e.target.value)}
+                                                className={inputClassName}
+                                            />
+                                        </FormInput>
+                                    </div>
+                                </div>
+
+                                <FormInput id="desk" label="Catatan Tambahan" icon={FileText} error={errors.desk}>
+                                    <Textarea
+                                        id="desk"
+                                        placeholder="Keterangan kondisi barang atau catatan lain..."
+                                        value={data.desk}
+                                        onChange={(e) => setData('desk', e.target.value)}
+                                        className="min-h-[100px] resize-none bg-white dark:bg-zinc-900 border-slate-200"
+                                    />
+                                </FormInput>
+                            </CardContent>
+                        </Card>
+
+                        {/* KOLOM KANAN: Rincian Finansial */}
+                        <div className="space-y-6">
+                            <Card className="shadow-lg border-t-4 border-t-emerald-500 h-fit sticky top-6">
+                                <CardHeader className="bg-emerald-50/50 dark:bg-emerald-950/10 border-b border-emerald-100 dark:border-emerald-900/20 pb-4">
+                                    <CardTitle className="flex items-center text-lg text-emerald-800 dark:text-emerald-400">
+                                        <Calculator className="w-5 h-5 mr-2" />
+                                        Kalkulator Edit
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-5 pt-6">
-                                    <FormItem label="Quantity (Kg)" error={errors.qty_kg}>
-                                        <div className="relative">
-                                            <Input
-                                                type="number"
-                                                placeholder="0"
-                                                value={data.qty_kg}
-                                                onChange={(e) => setData('qty_kg', Number(e.target.value))}
-                                                className="pr-12 text-right font-mono"
-                                            />
-                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">Kg</span>
-                                        </div>
-                                    </FormItem>
 
-                                    <FormItem label="Price /Qty (Rp)" error={errors.price_qty}>
-                                        <div className="relative">
-                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">Rp</span>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <FormInput id="qty_kg" label="Berat (Kg)" icon={Box} error={errors.qty_kg}>
+                                            <div className="relative">
+                                                <Input
+                                                    id="qty_kg"
+                                                    type="number"
+                                                    placeholder="0"
+                                                    value={data.qty_kg}
+                                                    onChange={(e) => setData('qty_kg', Number(e.target.value))}
+                                                    className={`${inputClassName} pr-8 font-bold text-lg`}
+                                                    required
+                                                />
+                                                <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">KG</span>
+                                            </div>
+                                        </FormInput>
+
+                                        <FormInput id="price_qty" label="Harga /Kg" icon={Coins} error={errors.price_qty}>
                                             <Input
+                                                id="price_qty"
                                                 type="number"
                                                 placeholder="0"
                                                 value={data.price_qty}
                                                 onChange={(e) => setData('price_qty', Number(e.target.value))}
-                                                className="pl-10 text-right font-mono"
+                                                className={inputClassName}
+                                                required
                                             />
-                                        </div>
-                                    </FormItem>
+                                        </FormInput>
+                                    </div>
 
-                                    <div className="relative pt-2">
-                                        <div className="absolute inset-0 flex items-center">
-                                            <span className="w-full border-t border-dashed" />
-                                        </div>
-                                        <div className="relative flex justify-center text-xs uppercase">
-                                            <span className="bg-white dark:bg-black px-2 text-muted-foreground">
-                                                Total Pendapatan (Editable)
-                                            </span>
+                                    {/* TOGGLE BAGI HASIL */}
+                                    <div className="space-y-2">
+                                        <Label className="text-xs font-semibold text-slate-500 uppercase flex items-center">
+                                            <Percent className="w-3.5 h-3.5 mr-1.5" /> Hitung Ulang (Bagi Hasil)
+                                        </Label>
+                                        <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-zinc-800 rounded-lg">
+                                            <button
+                                                type="button"
+                                                onClick={() => setData('percentage', '0.4')}
+                                                className={`py-2 text-sm font-medium rounded-md transition-all ${
+                                                    data.percentage === '0.4'
+                                                    ? 'bg-white text-indigo-600 shadow-sm border border-slate-200'
+                                                    : 'text-slate-500 hover:text-slate-700'
+                                                }`}
+                                            >
+                                                40%
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setData('percentage', '0.5')}
+                                                className={`py-2 text-sm font-medium rounded-md transition-all ${
+                                                    data.percentage === '0.5'
+                                                    ? 'bg-white text-indigo-600 shadow-sm border border-slate-200'
+                                                    : 'text-slate-500 hover:text-slate-700'
+                                                }`}
+                                            >
+                                                50%
+                                            </button>
                                         </div>
                                     </div>
 
-                                    <FormItem label="Amount (Rp)" error={errors.amount}>
-                                        <div className="flex gap-2">
-                                            <div className="relative w-full">
-                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-emerald-600 font-bold">Rp</span>
-                                                <Input
-                                                    type="number"
-                                                    placeholder="0"
-                                                    value={data.amount}
-                                                    onChange={(e) => setData('amount', Number(e.target.value))}
-                                                    className="pl-10 text-right font-mono font-bold text-emerald-700 bg-emerald-50/50 border-emerald-200 focus:ring-emerald-500"
-                                                />
-                                            </div>
-                                            <Button
-                                                type="button"
-                                                size="icon"
-                                                variant="outline"
-                                                onClick={calculateAmount}
-                                                title="Hitung Ulang Otomatis (Qty * Price * 0.4)"
-                                                className="flex-shrink-0"
-                                            >
-                                                <Calculator className="w-4 h-4" />
-                                            </Button>
+                                    <Separator className="bg-slate-200 dark:bg-zinc-700" />
+
+                                    {/* TOTAL AMOUNT BOX */}
+                                    <div className="space-y-2">
+                                        <Label className="text-xs font-semibold text-slate-500 uppercase">Total Pendapatan</Label>
+                                        <div className="bg-emerald-100 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 rounded-xl p-4 text-center">
+                                            <p className="text-sm text-emerald-600 dark:text-emerald-400 mb-1 font-medium">Hasil Kalkulasi</p>
+                                            <p className="text-3xl font-black text-emerald-700 dark:text-emerald-300 tracking-tight">
+                                                {formatRupiah(data.amount)}
+                                            </p>
+                                            {/* Input hidden untuk menyimpan nilai angka ke form */}
+                                            <Input
+                                                type="number"
+                                                value={data.amount}
+                                                onChange={(e) => setData('amount', Number(e.target.value))}
+                                                className="hidden"
+                                            />
                                         </div>
-                                        <p className="text-[10px] text-gray-500 mt-1 text-right">
-                                            *Klik ikon kalkulator untuk hitung otomatis (40%)
-                                        </p>
-                                    </FormItem>
+                                        <p className="text-[10px] text-gray-400 text-center">Angka di atas otomatis terupdate saat input berubah.</p>
+                                    </div>
 
                                     <div className="grid grid-cols-2 gap-4 pt-2">
-                                        <FormItem label="Keping" error={errors.keping}>
+                                        <FormInput id="keping" label="Keping" icon={Package} error={errors.keping}>
                                             <Input
+                                                id="keping"
                                                 type="number"
                                                 placeholder="0"
                                                 value={data.keping}
                                                 onChange={(e) => setData('keping', Number(e.target.value))}
+                                                className={inputClassName}
+                                                required
                                             />
-                                        </FormItem>
+                                        </FormInput>
 
-                                        <FormItem label="Kualitas" error={errors.kualitas}>
+                                        <FormInput id="kualitas" label="Kualitas" icon={TrendingUp} error={errors.kualitas}>
                                             <Input
-                                                placeholder="A/B/C"
+                                                id="kualitas"
+                                                placeholder="A / B"
                                                 value={data.kualitas}
                                                 onChange={(e) => setData('kualitas', e.target.value)}
+                                                className={`${inputClassName} uppercase`}
+                                                required
                                             />
-                                        </FormItem>
+                                        </FormInput>
                                     </div>
+
                                 </CardContent>
                             </Card>
                         </div>
+
                     </div>
 
                     <div className="flex justify-end pt-4 border-t mt-4">
-                        <Button disabled={processing} type="submit" size="lg" className="bg-indigo-600 hover:bg-indigo-700 w-full sm:w-auto">
+                        <Button disabled={processing} type="submit" size="lg" className="bg-indigo-600 hover:bg-indigo-700 w-full sm:w-auto shadow-lg">
                             <Save className="mr-2 h-4 w-4" />
                             Simpan Perubahan
                         </Button>

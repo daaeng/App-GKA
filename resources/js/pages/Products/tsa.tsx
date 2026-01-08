@@ -108,10 +108,10 @@ export default function Tsa({
                                 <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
                                     <Building2 className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                                 </div>
-                                Stok Masuk (TSA)
+                                Stok Masuk Karet
                             </h1>
                             <p className="text-gray-500 mt-1 ml-14">
-                                Monitoring pembelian karet dan penerimaan barang gudang.
+                                Monitoring pembelian karet dan penerimaan barang Temadu ~ Sebayar.
                             </p>
                         </div>
                         <div className="flex gap-2 ml-auto md:ml-0">

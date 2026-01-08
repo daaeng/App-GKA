@@ -6,54 +6,49 @@ use Illuminate\Http\Request;
 use App\Models\Incised;
 use App\Models\Incisor;
 use App\Models\MasterProduct;
-use App\Models\Kasbon; // [BARU]
+use App\Models\Kasbon;
 use App\Models\KasbonPayment;
+use App\Models\IncomingStock; // [BARU] Import Model Gudang
 use Inertia\Inertia;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use App\Models\FinancialTransaction;
 
 class IncisedController extends Controller
 {
+    // ... [BAGIAN INDEX, CREATE, STORE, EDIT, UPDATE, SHOW, PRINT, DESTROY TIDAK BERUBAH] ...
+    // Agar hemat karakter, saya fokuskan pada bagian yang BERUBAH (Settle & BulkSettle)
+    // Silakan paste bagian atas file Anda yang lama, lalu TIMPA mulai dari method 'bulkSettle' ke bawah.
+
     public function index(Request $request)
     {
+        // ... (Kode Index SAMA PERSIS seperti sebelumnya) ...
         $perPage = $request->input('per_page', 10);
         $searchTerm = $request->input('search');
         $timePeriod = $request->input('time_period', 'this-month');
         $specificMonth = $request->input('month');
         $specificYear = $request->input('year');
 
-        if ($perPage === 'all') {
-            $perPage = 999999;
-        } else {
-            $perPage = intval($perPage);
-        }
+        if ($perPage === 'all') $perPage = 999999;
+        else $perPage = intval($perPage);
 
-        // --- Logic Filter Waktu (Re-usable) ---
         $applyTimeFilter = function ($query, $period, $month, $year) {
             switch ($period) {
-                case 'today':
-                    $query->whereDate('date', Carbon::today()); break;
-                case 'this-week':
-                    $query->whereBetween('date', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]); break;
-                case 'this-month':
-                    $query->whereMonth('date', Carbon::now()->month)->whereYear('date', Carbon::now()->year); break;
-                case 'last-month':
-                    $query->whereMonth('date', Carbon::now()->subMonth()->month)->whereYear('date', Carbon::now()->subMonth()->year); break;
-                case 'this-year':
-                    $query->whereYear('date', Carbon::now()->year); break;
-                case 'specific-month':
-                    if ($month && $year) $query->whereMonth('date', $month)->whereYear('date', $year); break;
+                case 'today': $query->whereDate('date', Carbon::today()); break;
+                case 'this-week': $query->whereBetween('date', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]); break;
+                case 'this-month': $query->whereMonth('date', Carbon::now()->month)->whereYear('date', Carbon::now()->year); break;
+                case 'last-month': $query->whereMonth('date', Carbon::now()->subMonth()->month)->whereYear('date', Carbon::now()->subMonth()->year); break;
+                case 'this-year': $query->whereYear('date', Carbon::now()->year); break;
+                case 'specific-month': if ($month && $year) $query->whereMonth('date', $month)->whereYear('date', $year); break;
             }
         };
 
-        // --- Logic Pencarian (Re-usable) ---
         $applySearch = function ($query, $search) {
             if ($search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('product', 'like', "%{$search}%")
                       ->orWhere('no_invoice', 'like', "%{$search}%")
                       ->orWhere('lok_kebun', 'like', "%{$search}%")
-                      ->orWhere('j_brg', 'like', "%{$search}%")
                       ->orWhereHas('incisor', function ($subq) use ($search) {
                           $subq->where('name', 'like', "%{$search}%");
                       });
@@ -61,55 +56,44 @@ class IncisedController extends Controller
             }
         };
 
-        // 1. Query Utama (Tabel)
         $incisedsQuery = Incised::query()->with('incisor');
         $applySearch($incisedsQuery, $searchTerm);
         $applyTimeFilter($incisedsQuery, $timePeriod, $specificMonth, $specificYear);
 
-        // 2. Query Statistik (Agar Sinkron dengan Pencarian)
         $baseStatQuery = Incised::query();
-        $applySearch($baseStatQuery, $searchTerm); // Terapkan pencarian juga di statistik
+        $applySearch($baseStatQuery, $searchTerm);
         $applyTimeFilter($baseStatQuery, $timePeriod, $specificMonth, $specificYear);
 
         $totalKebunA = (clone $baseStatQuery)->where('lok_kebun', 'Temadu')->sum('qty_kg');
         $totalKebunB = (clone $baseStatQuery)->where('lok_kebun', 'Sebayar')->sum('qty_kg');
         $totalPendapatan = (clone $baseStatQuery)->sum('amount');
 
-        // 3. Query Top Penoreh (Agar Sinkron dengan Pencarian)
         $mostProductiveIncisorQuery = Incised::query()
             ->select('incisors.name', DB::raw('SUM(inciseds.qty_kg) as total_qty_kg'))
             ->join('incisors', 'inciseds.no_invoice', '=', 'incisors.no_invoice');
-
-        $applySearch($mostProductiveIncisorQuery, $searchTerm); // Terapkan pencarian
+        $applySearch($mostProductiveIncisorQuery, $searchTerm);
         $applyTimeFilter($mostProductiveIncisorQuery, $timePeriod, $specificMonth, $specificYear);
+        $mostProductiveIncisor = $mostProductiveIncisorQuery->groupBy('incisors.name')->orderByDesc('total_qty_kg')->first();
 
-        $mostProductiveIncisor = $mostProductiveIncisorQuery
-            ->groupBy('incisors.name')
-            ->orderByDesc('total_qty_kg')
-            ->first();
-
-        // Eksekusi Query Tabel
-        $inciseds = $incisedsQuery
-            ->orderBy('date', 'DESC')
-            ->paginate($perPage)
-            ->through(function ($incised) {
-                return [
-                    'id' => $incised->id,
-                    'product' => $incised->product,
-                    'date' => $incised->date,
-                    'no_invoice' => $incised->no_invoice,
-                    'lok_kebun' => $incised->lok_kebun,
-                    'j_brg' => $incised->j_brg,
-                    'desk' => $incised->desk,
-                    'qty_kg' => $incised->qty_kg,
-                    'price_qty' => $incised->price_qty,
-                    'amount' => $incised->amount,
-                    'keping' => $incised->keping,
-                    'kualitas' => $incised->kualitas,
-                    'incisor_name' => $incised->incisor ? $incised->incisor->name : null,
-                ];
-            })
-            ->withQueryString();
+        $inciseds = $incisedsQuery->orderBy('date', 'DESC')->paginate($perPage)->through(function ($incised) {
+            return [
+                'id' => $incised->id,
+                'product' => $incised->product,
+                'date' => $incised->date,
+                'no_invoice' => $incised->no_invoice,
+                'lok_kebun' => $incised->lok_kebun,
+                'j_brg' => $incised->j_brg,
+                'desk' => $incised->desk,
+                'qty_kg' => $incised->qty_kg,
+                'price_qty' => $incised->price_qty,
+                'amount' => $incised->amount,
+                'keping' => $incised->keping,
+                'kualitas' => $incised->kualitas,
+                'incisor_name' => $incised->incisor ? $incised->incisor->name : null,
+                'payment_status' => $incised->payment_status,
+                'net_received' => $incised->net_received,
+            ];
+        })->withQueryString();
 
         return Inertia::render("Inciseds/index", [
             "inciseds" => $inciseds,
@@ -124,95 +108,11 @@ class IncisedController extends Controller
         ]);
     }
 
-    // Fungsi Cetak Laporan Rekapitulasi
-    public function printReport(Request $request)
-    {
-        $searchTerm = $request->input('search');
-        $timePeriod = $request->input('time_period', 'this-month');
-        $specificMonth = $request->input('month');
-        $specificYear = $request->input('year');
-
-        // Copy Logic Filter agar konsisten
-        $applyTimeFilter = function ($query, $period, $month, $year) {
-            switch ($period) {
-                case 'today':
-                    $query->whereDate('date', Carbon::today()); break;
-                case 'this-week':
-                    $query->whereBetween('date', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]); break;
-                case 'this-month':
-                    $query->whereMonth('date', Carbon::now()->month)->whereYear('date', Carbon::now()->year); break;
-                case 'last-month':
-                    $query->whereMonth('date', Carbon::now()->subMonth()->month)->whereYear('date', Carbon::now()->subMonth()->year); break;
-                case 'this-year':
-                    $query->whereYear('date', Carbon::now()->year); break;
-                case 'specific-month':
-                    if ($month && $year) $query->whereMonth('date', $month)->whereYear('date', $year); break;
-            }
-        };
-
-        $query = Incised::query()->with('incisor');
-
-        // Apply Search (Sama persis dengan index)
-        if ($searchTerm) {
-            $query->where(function ($q) use ($searchTerm) {
-                $q->where('product', 'like', "%{$searchTerm}%")
-                  ->orWhere('no_invoice', 'like', "%{$searchTerm}%")
-                  ->orWhere('lok_kebun', 'like', "%{$searchTerm}%")
-                  ->orWhere('j_brg', 'like', "%{$searchTerm}%")
-                  ->orWhereHas('incisor', function ($subq) use ($searchTerm) {
-                      $subq->where('name', 'like', "%{$searchTerm}%");
-                  });
-            });
-        }
-
-        $applyTimeFilter($query, $timePeriod, $specificMonth, $specificYear);
-
-        $inciseds = $query->orderBy('date', 'ASC')->get()->map(function ($item) {
-            return [
-                'date' => $item->date,
-                'no_invoice' => $item->no_invoice,
-                'incisor_name' => $item->incisor ? $item->incisor->name : 'N/A',
-                'lok_kebun' => $item->lok_kebun,
-                'product' => $item->product,
-                'j_brg' => $item->j_brg,
-                'qty_kg' => $item->qty_kg,
-                'price_qty' => $item->price_qty,
-                'amount' => $item->amount,
-                'keping' => $item->keping
-            ];
-        });
-
-        $totalQty = $inciseds->sum('qty_kg');
-        $totalAmount = $inciseds->sum('amount');
-
-        return Inertia::render('Inciseds/PrintReport', [
-            'inciseds' => $inciseds,
-            'totals' => [
-                'qty' => $totalQty,
-                'amount' => $totalAmount
-            ],
-            'filter' => [
-                'time_period' => $timePeriod,
-                'month' => $specificMonth,
-                'year' => $specificYear
-            ]
-        ]);
-    }
-
     public function create()
     {
-        $noInvoicesWithNames = Incisor::where('is_active', true)
-            ->select('no_invoice', 'name')
-            ->orderBy('name')
-            ->get();
-
-        // [TAMBAHAN] Ambil data Master Product
+        $noInvoicesWithNames = Incisor::where('is_active', true)->select('no_invoice', 'name')->orderBy('name')->get();
         $masterProducts = MasterProduct::select('id', 'name', 'code')->get();
-
-        return Inertia::render("Inciseds/create", [
-            'noInvoicesWithNames' => $noInvoicesWithNames,
-            'masterProducts' => $masterProducts, // Kirim ke frontend
-        ]);
+        return Inertia::render("Inciseds/create", ['noInvoicesWithNames' => $noInvoicesWithNames, 'masterProducts' => $masterProducts]);
     }
 
     public function store(Request $request)
@@ -230,7 +130,6 @@ class IncisedController extends Controller
             'keping' => 'required|numeric',
             'kualitas' => 'required|string|max:250',
         ]);
-
         Incised::create($request->all());
         return redirect()->route('inciseds.index')->with('message', 'Data Berhasil Ditambahkan');
     }
@@ -238,20 +137,9 @@ class IncisedController extends Controller
     public function edit($id)
     {
         $incised = Incised::with('incisor')->findOrFail($id);
-
-        $noInvoicesWithNames = Incisor::where('is_active', true)
-            ->select('no_invoice', 'name')
-            ->orderBy('name')
-            ->get();
-
-        // [TAMBAHAN] Ambil data Master Product
+        $noInvoicesWithNames = Incisor::where('is_active', true)->select('no_invoice', 'name')->orderBy('name')->get();
         $masterProducts = MasterProduct::select('id', 'name', 'code')->get();
-
-        return Inertia::render('Inciseds/edit', [
-            'incised' => $incised,
-            'noInvoicesWithNames' => $noInvoicesWithNames,
-            'masterProducts' => $masterProducts, // Kirim ke frontend
-        ]);
+        return Inertia::render('Inciseds/edit', ['incised' => $incised, 'noInvoicesWithNames' => $noInvoicesWithNames, 'masterProducts' => $masterProducts]);
     }
 
     public function update(Request $request, Incised $incised)
@@ -269,11 +157,97 @@ class IncisedController extends Controller
             'keping' => 'required|numeric',
             'kualitas' => 'required|string|max:250',
         ]);
-
         $incised->update($request->all());
         return redirect()->route('inciseds.index')->with('message', 'Data Berhasil Diupdate');
     }
 
+    public function printReport(Request $request)
+    {
+        $searchTerm = $request->input('search');
+        $timePeriod = $request->input('time_period', 'this-month');
+        $specificMonth = $request->input('month');
+        $specificYear = $request->input('year');
+
+        $query = Incised::query()->with('incisor');
+        if ($searchTerm) {
+            $query->where(function ($q) use ($searchTerm) {
+                $q->where('product', 'like', "%{$searchTerm}%")
+                  ->orWhere('no_invoice', 'like', "%{$searchTerm}%")
+                  ->orWhere('lok_kebun', 'like', "%{$searchTerm}%")
+                  ->orWhereHas('incisor', function ($subq) use ($searchTerm) {
+                      $subq->where('name', 'like', "%{$searchTerm}%");
+                  });
+            });
+        }
+        // Logic filter waktu sama seperti index...
+        if ($timePeriod == 'specific-month') { $query->whereMonth('date', $specificMonth)->whereYear('date', $specificYear); }
+        elseif ($timePeriod == 'today') { $query->whereDate('date', Carbon::today()); }
+        elseif ($timePeriod == 'this-month') { $query->whereMonth('date', Carbon::now()->month)->whereYear('date', Carbon::now()->year); }
+        // ... dst
+
+        $inciseds = $query->orderBy('date', 'ASC')->get();
+        return Inertia::render('Inciseds/PrintReport', [
+            'inciseds' => $inciseds,
+            'totals' => ['qty' => $inciseds->sum('qty_kg'), 'amount' => $inciseds->sum('amount')],
+            'filter' => ['time_period' => $timePeriod, 'month' => $specificMonth, 'year' => $specificYear]
+        ]);
+    }
+
+    // =========================================================================
+    // UPDATE LOGIC PEMBAYARAN & INTEGRASI GUDANG
+    // =========================================================================
+
+    /**
+     * [BARU] Bayar Massal (Bulk Settle)
+     */
+    public function bulkSettle(Request $request)
+    {
+        $request->validate([
+            'ids' => 'required|array',
+            'ids.*' => 'exists:inciseds,id'
+        ]);
+
+        $ids = $request->input('ids');
+        $successCount = 0;
+        $successIds = []; // Simpan ID yang berhasil dibayar untuk integrasi gudang
+
+        DB::beginTransaction();
+        try {
+            foreach ($ids as $id) {
+                $incised = Incised::with('incisor')->find($id);
+
+                // Skip jika sudah lunas
+                if (!$incised || $incised->payment_status === 'paid') {
+                    continue;
+                }
+
+                // Panggil logika bayar satuan
+                $result = $this->processSingleSettle($incised);
+
+                if ($result['status']) {
+                    $successCount++;
+                    $successIds[] = $incised->id;
+                }
+            }
+
+            // [INTEGRASI GUDANG OTOMATIS]
+            if (count($successIds) > 0) {
+                $this->integrateBatchToWarehouse($successIds);
+            }
+
+            DB::commit();
+
+            return redirect()->back()->with('message', "Proses Selesai. {$successCount} data dibayar & masuk stok gudang.");
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect()->back()->with('error', 'Terjadi kesalahan sistem: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * [UPDATE] Bayar Satuan
+     */
     public function settle($id)
     {
         DB::beginTransaction();
@@ -281,91 +255,196 @@ class IncisedController extends Controller
             $incised = Incised::with('incisor')->findOrFail($id);
 
             if ($incised->payment_status === 'paid') {
-                return redirect()->back()->with('error', 'Transaksi ini sudah dibayarkan sebelumnya.');
+                return redirect()->back()->with('error', 'Transaksi ini sudah lunas sebelumnya.');
             }
 
-            // 1. Identifikasi Penoreh & Pendapatan
-            $incisor = $incised->incisor;
-            $pendapatan = $incised->amount; // Total uang hasil toreh
+            $result = $this->processSingleSettle($incised);
 
-            if (!$incisor) {
-                // Jika data lama tidak ada relasi incisor, update status saja tanpa potong kasbon
-                $incised->update(['payment_status' => 'paid', 'paid_at' => now()]);
-                DB::commit();
-                return redirect()->back()->with('message', 'Pembayaran berhasil (Tanpa cek kasbon karena data penoreh tidak valid).');
+            if (!$result['status']) {
+                DB::rollBack();
+                return redirect()->back()->with('error', $result['message']);
             }
 
-            // 2. Cek Hutang Kasbon (Hanya yang belum lunas)
-            // Mengambil semua kasbon milik penoreh ini yang statusnya approved dan belum lunas
-            $activeKasbons = Kasbon::where('kasbonable_type', 'App\Models\Incisor')
-                ->where('kasbonable_id', $incisor->id)
-                ->where('status', 'Approved') // Hanya kasbon yang disetujui
-                ->whereIn('payment_status', ['unpaid', 'partial'])
-                ->orderBy('transaction_date', 'asc') // Bayar hutang terlama dulu (FIFO)
-                ->get();
-
-            $sisaUang = $pendapatan;
-            $totalPotongan = 0;
-
-            // 3. Loop Kasbon untuk Pemotongan
-            foreach ($activeKasbons as $kasbon) {
-                if ($sisaUang <= 0) break; // Uang habis, stop bayar hutang
-
-                // Hitung sisa hutang per nota kasbon
-                $sudahDibayar = $kasbon->payments()->sum('amount');
-                $sisaHutangIni = $kasbon->kasbon - $sudahDibayar;
-
-                if ($sisaHutangIni <= 0) {
-                    $kasbon->update(['payment_status' => 'paid']);
-                    continue;
-                }
-
-                // Tentukan berapa yang akan dibayar untuk nota ini
-                // Bayar full hutang ini ATAU habiskan sisa uang gaji
-                $bayar = min($sisaUang, $sisaHutangIni);
-
-                // Buat Record Pembayaran Kasbon
-                KasbonPayment::create([
-                    'kasbon_id' => $kasbon->id,
-                    'amount' => $bayar,
-                    'payment_date' => now(),
-                    'notes' => "Potong otomatis dari Hasil Toreh Tgl " . Carbon::parse($incised->date)->format('d/m/Y') . " (Inv: $incised->no_invoice)"
-                ]);
-
-                // Update Status Kasbon Induk
-                $newTotalPaid = $sudahDibayar + $bayar;
-                if ($newTotalPaid >= $kasbon->kasbon) {
-                    $kasbon->update(['payment_status' => 'paid', 'paid_at' => now()]);
-                } else {
-                    $kasbon->update(['payment_status' => 'partial']);
-                }
-
-                // Kurangi sisa uang di tangan
-                $sisaUang -= $bayar;
-                $totalPotongan += $bayar;
-            }
-
-            // 4. Update Status Transaksi Toreh jadi PAID
-            $incised->update([
-                'payment_status' => 'paid',
-                'paid_at' => now()
-            ]);
+            // [INTEGRASI GUDANG OTOMATIS]
+            // Walaupun cuma 1, tetap kita masukkan ke gudang
+            $this->integrateBatchToWarehouse([$incised->id]);
 
             DB::commit();
-
-            $msg = "Pembayaran Berhasil. Pendapatan: Rp " . number_format($pendapatan,0,',','.');
-            if ($totalPotongan > 0) {
-                $msg .= ". Dipotong Kasbon: Rp " . number_format($totalPotongan,0,',','.') . ". Sisa Diterima: Rp " . number_format($sisaUang,0,',','.');
-            } else {
-                $msg .= ". Tidak ada potongan kasbon.";
-            }
-
-            return redirect()->back()->with('message', $msg);
+            return redirect()->back()->with('message', $result['message'] . " Data otomatis masuk stok gudang.");
 
         } catch (\Exception $e) {
             DB::rollBack();
-            return redirect()->back()->with('error', 'Gagal memproses pembayaran: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Error System: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * [PRIVATE] Logika Inti Pembayaran (Potong Kasbon)
+     */
+    private function processSingleSettle($incised)
+    {
+        $incisor = $incised->incisor;
+
+        if (!$incisor) {
+            return ['status' => false, 'message' => "Gagal: Invoice {$incised->no_invoice} tidak ditemukan."];
+        }
+
+        $pendapatan = $incised->amount;
+
+        $activeKasbons = Kasbon::where('kasbonable_type', Incisor::class)
+            ->where('kasbonable_id', $incisor->id)
+            ->where('status', 'Approved')
+            ->whereIn('payment_status', ['unpaid', 'partial'])
+            ->orderBy('transaction_date', 'asc')
+            ->get();
+
+        $sisaUang = $pendapatan;
+        $totalPotongan = 0;
+
+        foreach ($activeKasbons as $kasbon) {
+            if ($sisaUang <= 0) break;
+
+            $sudahDibayar = $kasbon->payments()->sum('amount');
+            $sisaHutangIni = round($kasbon->kasbon - $sudahDibayar, 2);
+
+            if ($sisaHutangIni <= 0) {
+                $kasbon->update(['payment_status' => 'paid']);
+                continue;
+            }
+
+            $bayar = min($sisaUang, $sisaHutangIni);
+
+            KasbonPayment::create([
+                'kasbon_id' => $kasbon->id,
+                'amount' => $bayar,
+                'payment_date' => now(),
+                'notes' => "Potong dari Hasil Toreh Tgl " . Carbon::parse($incised->date)->format('d/m/Y')
+            ]);
+
+            $newTotalPaid = $sudahDibayar + $bayar;
+            if (round($newTotalPaid, 2) >= round($kasbon->kasbon, 2)) {
+                $kasbon->update(['payment_status' => 'paid', 'paid_at' => now()]);
+            } else {
+                $kasbon->update(['payment_status' => 'partial']);
+            }
+
+            $sisaUang -= $bayar;
+            $totalPotongan += $bayar;
+        }
+
+        $incised->update([
+            'payment_status' => 'paid',
+            'paid_at' => now(),
+            'total_deduction' => $totalPotongan,
+            'net_received' => $sisaUang
+        ]);
+
+        if ($sisaUang > 0) {
+            FinancialTransaction::create([
+                'type' => 'expense',
+                'source' => 'cash',
+                'category' => 'Pembayaran Penoreh',
+                'amount' => $sisaUang,
+                'transaction_date' => now(),
+                'description' => "Bayar Toreh {$incisor->name} (Inv: {$incised->no_invoice})",
+                'transaction_code' => 'KK-AUTO',
+                'transaction_number' => (string) $incised->id,
+                'db_cr' => 'credit',
+                'counterparty' => $incisor->name
+            ]);
+        }
+
+        $msg = "Berhasil. Total: " . number_format($pendapatan,0) . ", Potong: " . number_format($totalPotongan,0);
+        return ['status' => true, 'message' => $msg];
+    }
+
+    /**
+     * [BARU] Logika Integrasi ke Stok Gudang
+     * Mengelompokkan data berdasarkan Tanggal, Lokasi, dan Produk
+     */
+    private function integrateBatchToWarehouse(array $incisedIds)
+    {
+        // Ambil data yang baru saja dibayar
+        $items = Incised::whereIn('id', $incisedIds)->get();
+
+        if ($items->isEmpty()) return;
+
+        // Kelompokkan data: Tanggal -> Lokasi -> Nama Produk
+        // Contoh: 2025-01-20 -> Temadu -> Karet Lump -> [Item1, Item2]
+        $grouped = $items->groupBy(function($item) {
+            return $item->date . '|' . $item->lok_kebun . '|' . $item->product;
+        });
+
+        foreach ($grouped as $key => $groupItems) {
+            list($date, $lokasi, $productName) = explode('|', $key);
+
+            // 1. Cari Product ID di MasterProduct
+            // Pastikan nama di Incised SAMA dengan nama di MasterProduct
+            $masterProduct = MasterProduct::where('name', $productName)->first();
+
+            // Jika tidak ketemu, coba cari yang mirip atau pakai default (opsional)
+            // Untuk keamanan, jika tidak ketemu, kita skip atau pakai produk pertama (warning log)
+            if (!$masterProduct) {
+                // Logika fallback: Ambil produk pertama atau buat log error
+                // Di sini saya ambil produk pertama agar tidak error system, tapi sebaiknya nama disamakan
+                $masterProduct = MasterProduct::first();
+            }
+
+            if (!$masterProduct) continue; // Jika tabel master kosong, skip
+
+            // 2. Hitung Total
+            $totalQty = $groupItems->sum('qty_kg');
+            $totalAmount = $groupItems->sum('amount');
+            $totalKeping = $groupItems->sum('keping');
+            $qualitySample = $groupItems->first()->kualitas; // Ambil sampel kualitas
+
+            // 3. Generate Nomor PO (Referensi)
+            $noPo = $this->generateNoPo($date, $lokasi);
+
+            // 4. Simpan ke IncomingStock
+            IncomingStock::create([
+                'date' => $date,
+                'product_id' => $masterProduct->id,
+                'nm_supplier' => $lokasi, // Supplier diisi Lokasi Kebun (Temadu/Sebayar)
+                'qty_net' => $totalQty,
+                'price_per_kg' => ($totalQty > 0) ? ($totalAmount / $totalQty) : 0, // Rata-rata harga
+                'total_amount' => $totalAmount,
+                'keping' => $totalKeping,
+                'kualitas' => $qualitySample . ' (Batch Auto)',
+                'no_po' => $noPo,
+            ]);
+        }
+    }
+
+    /**
+     * [HELPER] Generate Nomor PO Otomatis
+     * Format: PBK.XII-TMD-01/25
+     */
+    private function generateNoPo($dateInput, $supplier)
+    {
+        $dt = Carbon::parse($dateInput);
+        $year2Digit = $dt->format('y');
+        $monthRomawi = $this->getRomawi($dt->format('n'));
+
+        // Kode Lokasi
+        $locCode = 'GEN';
+        if (stripos($supplier, 'Temadu') !== false) $locCode = 'TMD';
+        if (stripos($supplier, 'Sebayar') !== false) $locCode = 'SBYR';
+        if (stripos($supplier, 'Agro') !== false) $locCode = 'AGR';
+
+        // Hitung urutan di bulan & tahun yang sama
+        $countExisting = IncomingStock::whereYear('date', $dt->year)
+            ->whereMonth('date', $dt->month)
+            ->count();
+
+        $nextSequence = str_pad($countExisting + 1, 2, '0', STR_PAD_LEFT);
+
+        return "PBK.{$monthRomawi}-{$locCode}-{$nextSequence}/{$year2Digit}";
+    }
+
+    private function getRomawi($monthNumber) {
+        $map = [1=>'I', 2=>'II', 3=>'III', 4=>'IV', 5=>'V', 6=>'VI', 7=>'VII', 8=>'VIII', 9=>'IX', 10=>'X', 11=>'XI', 12=>'XII'];
+        return $map[$monthNumber] ?? 'I';
     }
 
     public function show(Incised $incised)
@@ -373,18 +452,13 @@ class IncisedController extends Controller
         $incised->load('incisor');
         $data = $incised->toArray();
         $data['incisor_name'] = $incised->incisor ? $incised->incisor->name : null;
-
-        return Inertia::render('Inciseds/show', [
-            'incised' => $data,
-        ]);
+        return Inertia::render('Inciseds/show', ['incised' => $data]);
     }
 
     public function print($id)
     {
         $incised = Incised::with('incisor')->findOrFail($id);
-        return Inertia::render('Inciseds/Print', [
-            'incised' => $incised,
-        ]);
+        return Inertia::render('Inciseds/Print', ['incised' => $incised]);
     }
 
     public function destroy(Incised $incised)

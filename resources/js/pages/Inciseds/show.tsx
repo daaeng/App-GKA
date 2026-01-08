@@ -1,64 +1,19 @@
-import Heading from '../../components/heading';
-import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
-import { Button } from '../../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'; // Impor komponen Card
-import AppLayout from '../../layouts/app-layout';
-import { type BreadcrumbItem } from '../../types';
-import { Head, Link } from '@inertiajs/react';
+import React from 'react';
+import { Head, Link, router } from '@inertiajs/react';
+import AppLayout from '@/layouts/app-layout';
+import { type BreadcrumbItem } from '@/types';
+import Heading from '@/components/heading';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import {
-    Box,
-    Calendar,
-    CircleAlert,
-    DollarSign,
-    Leaf,
-    Rss,
-    Tag,
-    Undo2,
-    User, // Mengganti Leaf dengan User untuk Penoreh
-    MapPin, // Mengganti Leaf dengan MapPin untuk Lokasi
-    FileText, // Untuk Deskripsi
-    TrendingUp, // Untuk Kualitas
-    Package, // Untuk Keping
-    Printer // [BARU] Icon Printer
+    ArrowLeft, Printer, Wallet, CheckCircle2,
+    Calendar, User, MapPin, Package, Tag, Scale,
+    AlertCircle, FileText, Calculator
 } from 'lucide-react';
-import React from 'react'; // Impor React
 
-const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Incised',
-        href: route('inciseds.index'), // Pastikan route 'inciseds.index' ada
-    },
-    {
-        title: 'Detail Transaksi',
-        href: '#',
-    }
-];
-
-// Helper format mata uang
-const formatCurrency = (value: number) => {
-    if (isNaN(value)) return 'N/A';
-    return new Intl.NumberFormat('id-ID', {
-        style: 'currency',
-        currency: 'IDR',
-        minimumFractionDigits: 0,
-    }).format(value);
-};
-
-// Helper format tanggal
-const formatDate = (dateString: string) => {
-    if (!dateString) return 'N/A';
-    try {
-        return new Date(dateString).toLocaleDateString('id-ID', {
-            day: '2-digit',
-            month: 'long',
-            year: 'numeric',
-        });
-    } catch (e) {
-        return dateString;
-    }
-};
-
-// Interface dari file Anda
+// --- Interfaces sesuai data dari Controller ---
 interface Incised {
     id: number;
     product: string;
@@ -72,215 +27,232 @@ interface Incised {
     amount: number;
     keping: number;
     kualitas: string;
-    incisor?: {
-        name: string;
-    };
-    incisor_name?: string | null;
+    incisor_name: string | null;
+    // Kolom Status & Keuangan
+    payment_status: 'unpaid' | 'paid';
+    paid_at: string | null;
+    total_deduction: number; // Total Potongan Kasbon
+    net_received: number;    // Total Bersih Diterima
 }
 
-// Komponen helper untuk menampilkan item detail (Label di atas, Data di bawah)
-const InfoItem = ({
-    icon: Icon,
-    label,
-    value,
-}: {
-    icon: React.ElementType;
-    label: string;
-    value: string | undefined | null;
-}) => (
-    <div className="flex flex-col space-y-1">
-        <label className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center">
-            <Icon className="w-4 h-4 mr-2" />
-            {label}
-        </label>
-        <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{value || 'N/A'}</p>
-    </div>
-);
+interface PageProps {
+    incised: Incised;
+}
 
-// Komponen helper untuk menampilkan item finansial (Label kiri, Data kanan)
-const FinancialItem = ({
-    icon: Icon,
-    label,
-    value,
-    highlight = false,
-}: {
-    icon: React.ElementType;
-    label: string;
-    value: string;
-    highlight?: boolean;
-}) => (
-    <div className={`flex items-center justify-between py-3 ${highlight ? 'px-3 -mx-3 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg' : 'border-b dark:border-gray-700'}`}>
-        <dt className="text-sm font-medium text-gray-600 dark:text-gray-300 flex items-center">
-            <Icon className={`w-4 h-4 mr-2 ${highlight ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400'}`} />
-            {label}
-        </dt>
-        <dd className={`text-sm font-semibold ${highlight ? 'text-indigo-600 dark:text-indigo-300' : 'text-gray-900 dark:text-gray-100'}`}>
-            {value}
-        </dd>
-    </div>
-);
+// --- Helpers ---
+const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
+        minimumFractionDigits: 0,
+    }).format(value);
+};
 
+const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('id-ID', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+    });
+};
 
-export default function ShowIncised({ incised }: { incised: Incised }) {
+export default function Show({ incised }: PageProps) {
+    const breadcrumbs: BreadcrumbItem[] = [
+        { title: 'Data Penorehan', href: route('inciseds.index') },
+        { title: 'Detail Transaksi', href: '#' },
+    ];
 
-    // [BARU] Fungsi untuk membuka halaman cetak di tab baru
+    const isPaid = incised.payment_status === 'paid';
+
+    // --- Handler Pembayaran ---
+    // Ini akan memanggil fungsi settle di Controller yang memotong kasbon otomatis
+    const handlePay = () => {
+        if (confirm(`Konfirmasi Pembayaran untuk ${incised.incisor_name || 'Penoreh'}?\n\nSistem akan otomatis mengecek dan memotong KASBON jika penoreh memiliki hutang.`)) {
+            router.post(route('inciseds.settle', incised.id));
+        }
+    };
+
     const handlePrint = () => {
-        const printUrl = route('inciseds.print', incised.id);
-        window.open(printUrl, '_blank');
+        window.print();
     };
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Detail Data Harian" />
+            <Head title={`Detail Transaksi - ${incised.no_invoice}`} />
 
-            <div className="min-h-screen bg-gray-50 dark:bg-black p-4 sm:p-6 lg:p-8">
-                {/* Header Halaman */}
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-                    <Heading
-                        title="Detail Data Harian Penoreh"
-                        description={`Dicatat pada ${formatDate(incised.date)}`}
-                        className="text-2xl font-semibold text-gray-800 dark:text-gray-100"
-                    />
-                    
-                    {/* [UPDATED] Grup Tombol Aksi */}
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                        <Button 
-                            onClick={handlePrint}
-                            className="bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-indigo-700 dark:hover:bg-indigo-600 transition-all duration-200 rounded-lg shadow-sm flex items-center justify-center flex-1 sm:flex-none"
-                        >
-                            <Printer className="h-4 w-4 mr-2" />
-                            Cetak
+            <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
+
+                {/* Header Page */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
+                    <div className="flex items-center gap-4">
+                        <Link href={route('inciseds.index')}>
+                            <Button variant="outline" size="icon" className="rounded-full"><ArrowLeft className="w-4 h-4" /></Button>
+                        </Link>
+                        <div>
+                            <h1 className="text-2xl font-bold tracking-tight">Rincian Transaksi</h1>
+                            <p className="text-muted-foreground text-sm">Invoice: <span className="font-mono font-medium text-black dark:text-white">{incised.no_invoice}</span></p>
+                        </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                        <Button variant="outline" onClick={handlePrint} className="gap-2 bg-white dark:bg-zinc-800">
+                            <Printer className="w-4 h-4" /> Cetak
                         </Button>
 
-                        <Link href={route('inciseds.index')} className="flex-1 sm:flex-none">
-                            <Button className="w-full bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition-all duration-200 rounded-lg shadow-sm flex items-center justify-center">
-                                <Undo2 className="h-4 w-4 mr-2" />
-                                Kembali
+                        {/* TAMPILKAN TOMBOL BAYAR JIKA BELUM LUNAS */}
+                        {!isPaid && (
+                            <Button onClick={handlePay} className="bg-indigo-600 hover:bg-indigo-700 gap-2 text-white shadow-md">
+                                <Wallet className="w-4 h-4" /> Proses Pembayaran
                             </Button>
-                        </Link>
+                        )}
                     </div>
                 </div>
 
-                {/* Peringatan jika penoreh tidak ada */}
-                {incised.incisor === undefined && incised.incisor_name === null && (
-                    <Alert variant="destructive" className="mb-6 bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-700 text-red-800 dark:text-red-200">
-                        <CircleAlert className="h-4 w-4 text-red-500 dark:text-red-300" />
-                        <AlertTitle className='font-bold text-red-700 dark:text-red-100'>Peringatan</AlertTitle>
-                        <AlertDescription>
-                            Data penoreh (Incisor) untuk no. invoice ini tidak ditemukan.
-                        </AlertDescription>
-                    </Alert>
-                )}
-
-                {/* Layout Grid Utama */}
+                {/* --- MAIN CONTENT --- */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-                    {/* Kolom Kiri (Lebar) */}
+                    {/* KOLOM KIRI: Informasi Data Fisik */}
                     <div className="lg:col-span-2 space-y-6">
-                        {/* Kartu Detail Transaksi */}
-                        <Card className="shadow-lg dark:bg-gray-800">
-                            <CardHeader>
-                                <CardTitle className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                                    Detail Transaksi
+                        <Card className="shadow-sm border-t-4 border-t-blue-500">
+                            <CardHeader className="pb-4 border-b">
+                                <CardTitle className="text-base flex items-center gap-2">
+                                    <Tag className="w-4 h-4 text-blue-500" /> Informasi Produk
                                 </CardTitle>
                             </CardHeader>
-                            <CardContent>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
-                                    <InfoItem
-                                        icon={User}
-                                        label="Nama Penoreh"
-                                        value={incised.incisor?.name || 'N/A'}
-                                    />
-                                    <InfoItem
-                                        icon={Rss}
-                                        label="No. Invoice"
-                                        value={incised.no_invoice}
-                                    />
-                                    <InfoItem
-                                        icon={Box}
-                                        label="Produk"
-                                        value={incised.product}
-                                    />
-                                    <InfoItem
-                                        icon={Tag}
-                                        label="Jenis Barang"
-                                        value={incised.j_brg}
-                                    />
-                                    <InfoItem
-                                        icon={MapPin}
-                                        label="Lokasi Kebun"
-                                        value={incised.lok_kebun}
-                                    />
-                                    <InfoItem
-                                        icon={Calendar}
-                                        label="Tanggal"
-                                        value={formatDate(incised.date)}
-                                    />
+                            <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-4">
+                                <div className="space-y-1">
+                                    <p className="text-xs text-muted-foreground uppercase flex items-center gap-1"><Calendar className="w-3 h-3"/> Tanggal Masuk</p>
+                                    <p className="font-medium">{formatDate(incised.date)}</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-xs text-muted-foreground uppercase flex items-center gap-1"><User className="w-3 h-3"/> Nama Penoreh</p>
+                                    <p className="font-medium text-lg">{incised.incisor_name || 'Tidak Diketahui'}</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-xs text-muted-foreground uppercase flex items-center gap-1"><MapPin className="w-3 h-3"/> Lokasi Kebun</p>
+                                    <Badge variant="secondary" className="font-normal">{incised.lok_kebun}</Badge>
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-xs text-muted-foreground uppercase flex items-center gap-1"><Package className="w-3 h-3"/> Jenis Barang</p>
+                                    <p className="font-medium">{incised.product} ({incised.j_brg})</p>
+                                </div>
+                                <div className="md:col-span-2 bg-slate-50 dark:bg-zinc-900 p-4 rounded-lg border border-dashed">
+                                    <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><FileText className="w-3 h-3"/> Catatan / Deskripsi:</p>
+                                    <p className="italic text-sm text-slate-700 dark:text-slate-300">{incised.desk || '-'}</p>
                                 </div>
                             </CardContent>
                         </Card>
 
-                        {/* Kartu Deskripsi */}
-                        <Card className="shadow-lg dark:bg-gray-800">
-                            <CardHeader>
-                                <CardTitle className="text-xl font-semibold text-gray-900 dark:text-gray-100 flex items-center">
-                                    <FileText className="w-5 h-5 mr-2 text-gray-500 dark:text-gray-400" />
-                                    Deskripsi
+                        {/* Statistik Fisik */}
+                        <div className="grid grid-cols-3 gap-4">
+                            <Card className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm">
+                                <CardContent className="p-4 text-center">
+                                    <p className="text-xs text-slate-500 font-semibold uppercase mb-1">Berat (Kg)</p>
+                                    <p className="text-2xl font-bold text-slate-800 dark:text-white">{incised.qty_kg}</p>
+                                </CardContent>
+                            </Card>
+                            <Card className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm">
+                                <CardContent className="p-4 text-center">
+                                    <p className="text-xs text-slate-500 font-semibold uppercase mb-1">Jumlah Keping</p>
+                                    <p className="text-2xl font-bold text-slate-800 dark:text-white">{incised.keping}</p>
+                                </CardContent>
+                            </Card>
+                            <Card className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 shadow-sm">
+                                <CardContent className="p-4 text-center">
+                                    <p className="text-xs text-slate-500 font-semibold uppercase mb-1">Kualitas</p>
+                                    <p className="text-2xl font-bold text-slate-800 dark:text-white">{incised.kualitas}</p>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </div>
+
+                    {/* KOLOM KANAN: Rincian Keuangan (Struk Gaji) */}
+                    <div className="lg:col-span-1">
+                        <Card className="h-full border-t-4 border-t-emerald-500 shadow-lg relative overflow-hidden bg-white dark:bg-zinc-900">
+
+                            {/* Watermark Lunas */}
+                            {isPaid && (
+                                <div className="absolute top-5 right-[-30px] rotate-45 bg-emerald-500 text-white text-[10px] font-bold px-10 py-1 shadow-md z-10 print:border print:border-black print:bg-white print:text-black">
+                                    LUNAS
+                                </div>
+                            )}
+
+                            <CardHeader className="bg-emerald-50/50 dark:bg-emerald-950/10 pb-6 border-b border-emerald-100 dark:border-emerald-900/20">
+                                <CardTitle className="flex items-center gap-2 text-emerald-800 dark:text-emerald-400">
+                                    <Wallet className="w-5 h-5" /> Keuangan
                                 </CardTitle>
+                                <CardDescription>Rincian pendapatan bersih.</CardDescription>
                             </CardHeader>
-                            <CardContent>
-                                <p className="text-base text-gray-700 dark:text-gray-300 min-h-[80px] prose dark:prose-invert">
-                                    {incised.desk || 'Tidak ada deskripsi.'}
-                                </p>
+
+                            <CardContent className="pt-6 space-y-4">
+
+                                {/* Status Badge */}
+                                <div className="flex justify-between items-center mb-4">
+                                    <span className="text-sm font-medium text-slate-500">Status Bayar</span>
+                                    {isPaid ? (
+                                        <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-100 px-3">
+                                            <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Sudah Dibayar
+                                        </Badge>
+                                    ) : (
+                                        <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+                                            <AlertCircle className="w-3.5 h-3.5 mr-1" /> Belum Dibayar
+                                        </Badge>
+                                    )}
+                                </div>
+
+                                <Separator />
+
+                                {/* Kalkulasi Detail */}
+                                <div className="space-y-3 text-sm">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-slate-600 dark:text-slate-400">Harga Satuan</span>
+                                        <span className="font-mono">{formatCurrency(incised.price_qty)} /kg</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-slate-600 dark:text-slate-400">Berat Total</span>
+                                        <span className="font-mono">x {incised.qty_kg} kg</span>
+                                    </div>
+
+                                    {/* Garis pemisah kecil */}
+                                    <div className="border-t border-dashed border-slate-200 dark:border-slate-700 my-2"></div>
+
+                                    <div className="flex justify-between items-center font-semibold text-slate-700 dark:text-slate-200">
+                                        <span>Pendapatan Kotor</span>
+                                        <span>{formatCurrency(incised.amount)}</span>
+                                    </div>
+
+                                    {/* Bagian Potongan Kasbon (Tampil Merah) */}
+                                    {(isPaid && incised.total_deduction > 0) && (
+                                        <div className="bg-red-50 dark:bg-red-950/20 p-2 rounded border border-red-100 dark:border-red-900/30 mt-2 animate-in fade-in slide-in-from-top-1">
+                                            <div className="flex justify-between items-center text-red-700 dark:text-red-400 font-medium">
+                                                <span className="flex items-center gap-1 text-xs uppercase"><Scale className="w-3 h-3"/> Potong Kasbon</span>
+                                                <span>- {formatCurrency(incised.total_deduction)}</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <Separator className="my-4" />
+
+                                {/* Grand Total (Net Received) */}
+                                <div className="bg-slate-900 dark:bg-slate-800 text-white p-4 rounded-xl text-center shadow-inner">
+                                    <p className="text-[10px] opacity-70 uppercase tracking-widest mb-1">Total Diterima (Net)</p>
+                                    <p className="text-3xl font-extrabold tracking-tight">
+                                        {/* Jika sudah bayar, tampilkan net_received. Jika belum, tampilkan estimasi (amount) */}
+                                        {isPaid ? formatCurrency(incised.net_received) : formatCurrency(incised.amount)}
+                                    </p>
+                                </div>
+
+                                {isPaid && incised.paid_at && (
+                                    <p className="text-center text-[10px] text-slate-400 mt-2">
+                                        Dibayarkan pada: {new Date(incised.paid_at).toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'short' })}
+                                    </p>
+                                )}
+
                             </CardContent>
                         </Card>
                     </div>
-
-                    {/* Kolom Kanan (Sempit) */}
-                    <div className="lg:col-span-1 space-y-6">
-                        {/* Kartu Rincian Finansial */}
-                        <Card className="shadow-lg dark:bg-gray-800">
-                            <CardHeader>
-                                <CardTitle className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                                    Rincian Finansial
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <dl className="divide-y dark:divide-gray-700">
-                                    <FinancialItem
-                                        icon={Box}
-                                        label="QTY (Kg)"
-                                        value={`${incised.qty_kg.toString()} kg`}
-                                    />
-                                    <FinancialItem
-                                        icon={DollarSign}
-                                        label="Harga per Kg"
-                                        value={formatCurrency(incised.price_qty)}
-                                    />
-                                    
-                                    {/* Total Jumlah Diberi Highlight */}
-                                    <FinancialItem
-                                        icon={DollarSign}
-                                        label="Total Jumlah"
-                                        value={formatCurrency(incised.amount)}
-                                        highlight={true}
-                                    />
-
-                                    <FinancialItem
-                                        icon={Package}
-                                        label="Keping"
-                                        value={incised.keping.toString()}
-                                    />
-                                    <FinancialItem
-                                        icon={TrendingUp}
-                                        label="Kualitas"
-                                        value={incised.kualitas}
-                                    />
-                                </dl>
-                            </CardContent>
-                        </Card>
-                    </div>
-
                 </div>
             </div>
         </AppLayout>

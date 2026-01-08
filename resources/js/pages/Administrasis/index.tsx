@@ -387,12 +387,15 @@ export default function AdminPage({ requests, notas, summary, chartData, filter,
                                 <div><p className="text-xs font-semibold uppercase text-muted-foreground mb-2">Pemasukan (Sumber Kas)</p><ReportRow label="Penarikan dari Bank" value={summary.reports.kas.in_penarikan} /></div>
                                 <div>
                                     <p className="text-xs font-semibold uppercase text-muted-foreground mb-2 mt-4">Pengeluaran (Operasional)</p>
+                                    {/* [BARU] Tampilkan Pembayaran Penoreh Paling Atas */}
+                                    <ReportRow label="Pembayaran Karet dari Penoreh" value={summary.reports.kas.out_bayar_penoreh} isMinus isBold />
+
                                     <ReportRow label="Operasional Lapangan" value={summary.reports.kas.out_lapangan} isMinus />
                                     <ReportRow label="Operasional Kantor" value={summary.reports.kas.out_kantor} isMinus />
                                     <ReportRow label="BPJS Ketenagakerjaan" value={summary.reports.kas.out_bpjs} isMinus />
-                                    <ReportRow label="Pembelian Karet (Tunai)" value={summary.reports.kas.out_belikaret} isMinus />
+                                    <ReportRow label="Pembelian Karet (Manual)" value={summary.reports.kas.out_belikaret} isMinus />
                                     <ReportRow label="Kasbon Pegawai Kantor" value={summary.reports.kas.out_kasbon_pegawai} isMinus />
-                                    <ReportRow label="Kasbon Penoreh" value={summary.reports.kas.out_kasbon_penoreh} isMinus />
+                                    <ReportRow label="Kasbon Penoreh (Pinjaman)" value={summary.reports.kas.out_kasbon_penoreh} isMinus />
                                 </div>
                                 <div className="pt-4 border-t border-gray-200 dark:border-zinc-700"><ReportRow label="Sisa Kas Periode Ini" value={summary.reports.kas.balance} isBold /></div></CardContent></Card>
                             {/* NERACA */}

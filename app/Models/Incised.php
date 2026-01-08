@@ -21,7 +21,10 @@ class Incised extends Model
         'kualitas',
 
         'payment_status',
-        'paid_at'
+        'paid_at',
+
+        'total_deduction',
+        'net_received'
 
     ];
 

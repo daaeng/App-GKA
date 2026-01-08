@@ -21,8 +21,9 @@ use App\Http\Controllers\IncomingStockController;
 use App\Http\Controllers\OutgoingStockController;
 use App\Http\Controllers\MasterProductController;
 use App\Http\Controllers\ProductController; // Legacy Controller
-
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 
 Route::get('/', function () {
@@ -207,6 +208,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('inciseds', IncisedController::class)->middleware("permission:incised.view");
 
     Route::post('/inciseds/{id}/settle', [IncisedController::class, 'settle'])->name('inciseds.settle');
+    // Tambahkan di bawah route inciseds.settle yang lama
+    Route::post('/inciseds/bulk-settle', [IncisedController::class, 'bulkSettle'])->name('inciseds.bulkSettle');
 
     // Kasbon
     Route::post('/kasbons/get-incisor-data', [KasbonController::class, 'getIncisorData'])->name('kasbons.getIncisorData')->middleware("permission:kasbons.view");
@@ -228,6 +231,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Attendance
     Route::resource('attendances', AttendanceController::class);
+
 });
 
 require __DIR__.'/settings.php';

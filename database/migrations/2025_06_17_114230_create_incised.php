@@ -29,6 +29,8 @@ return new class extends Migration
             $table->string('payment_status')->default('unpaid');
             $table->timestamp('paid_at')->nullable();
             $table->index(['no_invoice', 'date']);
+            $table->decimal('total_deduction', 16, 2)->default(0);
+            $table->decimal('net_received', 16, 2)->default(0);
 
             $table->timestamps();
         });
