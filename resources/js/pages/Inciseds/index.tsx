@@ -162,6 +162,12 @@ export default function Admin({ inciseds, flash, filter, totalKebunA, totalKebun
         <div className="flex justify-center items-center mt-6 space-x-2">{links.map((link, index) => (<Link key={index} href={link.url || '#'} className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors duration-200 ${link.active ? 'bg-indigo-600 text-white shadow-md' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700'} ${!link.url ? 'text-gray-400 cursor-not-allowed opacity-50' : ''}`} dangerouslySetInnerHTML={{ __html: link.label }} />))}</div>
     );
 
+    const formatRupiah = (val: string) => {
+        const num = parseFloat(val);
+        if (isNaN(num)) return 'Rp 0';
+        return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num);
+    }
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Data Penorehan" />
@@ -240,6 +246,7 @@ export default function Admin({ inciseds, flash, filter, totalKebunA, totalKebun
                                                 <TableHead className="font-semibold">Lokasi Kebun</TableHead>
                                                 <TableHead className="text-right font-semibold">Hasil (Kg)</TableHead>
                                                 <TableHead className="text-right font-semibold">Keping</TableHead>
+                                                <TableHead className="text-right font-semibold">Amount</TableHead>
                                                 <TableHead className="text-center font-semibold">Status / Aksi</TableHead>
                                             </TableRow>
                                         </TableHeader>
@@ -268,6 +275,7 @@ export default function Admin({ inciseds, flash, filter, totalKebunA, totalKebun
                                                         <TableCell><Badge variant="outline" className={incised.lok_kebun.toLowerCase().includes('temadu') ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-blue-50 text-blue-700 border-blue-200"}>{incised.lok_kebun}</Badge></TableCell>
                                                         <TableCell className="text-right font-bold text-gray-700 dark:text-gray-300">{incised.qty_kg}</TableCell>
                                                         <TableCell className="text-right">{incised.keping}</TableCell>
+                                                        <TableCell className="text-right">{formatRupiah(incised.amount)}</TableCell>
                                                         <TableCell>
                                                             <div className="flex items-center justify-center gap-1">
                                                                 <Link href={route('inciseds.show', incised.id)}><Button size="icon" variant="ghost" className="h-8 w-8 text-slate-500 hover:text-blue-600 hover:bg-blue-50"><Eye className="h-4 w-4" /></Button></Link>

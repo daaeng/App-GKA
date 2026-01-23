@@ -364,24 +364,31 @@ class KasbonController extends Controller
         ]);
     }
 
-   public function storePegawai(Request $request)
+    public function storePegawai(Request $request)
     {
+        // 1. Hapus 'gaji' dari validasi karena kita akan ambil otomatis
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
-            'gaji'        => 'required|numeric|min:0',
+            // 'gaji' => 'required|numeric|min:0',  <-- HAPUS BARIS INI
             'kasbon'      => 'required|numeric|min:1',
             'status'      => 'required|string',
             'reason'      => 'nullable|string',
             'transaction_date' => 'required|date',
         ]);
 
+        // 2. Ambil data pegawai dari database
         $employee = Employee::findOrFail($validated['employee_id']);
 
+        // 3. Cek Limit Kasbon
         if ($validated['status'] === 'Approved' && $validated['kasbon'] > $employee->salary) {
             return back()->withErrors(['kasbon' => 'Jumlah kasbon tidak boleh melebihi gaji pegawai.'])->withInput();
         }
 
         $dataToCreate = $validated;
+
+        // 4. Masukkan Gaji secara otomatis di sini [FIX]
+        $dataToCreate['gaji'] = $employee->salary;
+
         $dataToCreate['kasbonable_type'] = Employee::class;
         $dataToCreate['kasbonable_id'] = $validated['employee_id'];
         $dataToCreate['month'] = Carbon::parse($validated['transaction_date'])->month;

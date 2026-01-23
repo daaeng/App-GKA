@@ -23,7 +23,7 @@ class IncisedController extends Controller
     public function index(Request $request)
     {
         // ... (Kode Index SAMA PERSIS seperti sebelumnya) ...
-        $perPage = $request->input('per_page', 10);
+        $perPage = $request->input('per_page', 20);
         $searchTerm = $request->input('search');
         $timePeriod = $request->input('time_period', 'this-month');
         $specificMonth = $request->input('month');
@@ -65,7 +65,10 @@ class IncisedController extends Controller
         $applyTimeFilter($baseStatQuery, $timePeriod, $specificMonth, $specificYear);
 
         $totalKebunA = (clone $baseStatQuery)->where('lok_kebun', 'Temadu')->sum('qty_kg');
-        $totalKebunB = (clone $baseStatQuery)->where('lok_kebun', 'Sebayar')->sum('qty_kg');
+        $totalKebunB = (clone $baseStatQuery)->where('lok_kebun', 'Sebayar A')->sum('qty_kg');
+        $totalKebunB2 = (clone $baseStatQuery)->where('lok_kebun', 'Sebayar B')->sum('qty_kg');
+        $totalKebunB3 = (clone $baseStatQuery)->where('lok_kebun', 'Sebayar C')->sum('qty_kg');
+        $totalKebunB4 = (clone $baseStatQuery)->where('lok_kebun', 'Sebayar D')->sum('qty_kg');
         $totalPendapatan = (clone $baseStatQuery)->sum('amount');
 
         $mostProductiveIncisorQuery = Incised::query()
@@ -99,7 +102,7 @@ class IncisedController extends Controller
             "inciseds" => $inciseds,
             "filter" => $request->only(['search', 'time_period', 'month', 'year', 'per_page']),
             'totalKebunA' => (float)$totalKebunA,
-            'totalKebunB' => (float)$totalKebunB,
+            'totalKebunB' => (float)$totalKebunB + (float)$totalKebunB2 + (float)$totalKebunB3 + (float)$totalKebunB4,
             'totalPendapatan' => (float)$totalPendapatan,
             'mostProductiveIncisor' => [
                 'name' => $mostProductiveIncisor ? $mostProductiveIncisor->name : 'N/A',

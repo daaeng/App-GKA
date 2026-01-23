@@ -223,7 +223,10 @@ export default function CreateIncised({ noInvoicesWithNames, masterProducts }: {
                                             >
                                                 <option value="" disabled>-- Pilih Lokasi --</option>
                                                 <option value="Temadu">Temadu</option>
-                                                <option value="Sebayar">Sebayar</option>
+                                                <option value="Sebayar A">Sebayar A (atas)</option>
+                                                <option value="Sebayar B">Sebayar B (bawah)</option>
+                                                <option value="Sebayar C">Sebayar C (tengah)</option>
+                                                <option value="Sebayar D">Sebayar D (vila)</option>
                                             </select>
                                         </FormInput>
 

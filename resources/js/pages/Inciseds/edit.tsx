@@ -364,7 +364,7 @@ export default function EditIncised({
                                                 type="number"
                                                 value={data.amount}
                                                 onChange={(e) => setData('amount', Number(e.target.value))}
-                                                className="hidden"
+                                                // className="hidden"
                                             />
                                         </div>
                                         <p className="text-[10px] text-gray-400 text-center">Angka di atas otomatis terupdate saat input berubah.</p>
