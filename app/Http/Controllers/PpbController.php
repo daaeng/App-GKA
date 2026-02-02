@@ -9,12 +9,12 @@ use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
 use Inertia\Response;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Validation\Rule; // (TAMBAHAN BARU)
+use Illuminate\Validation\Rule;
 
 class PpbController extends Controller
 {
     /**
-     * Menampilkan halaman list PPB dengan pagination dan search.
+     * Menampilkan halaman list PPB.
      */
     public function index(Request $request): Response
     {
@@ -39,17 +39,94 @@ class PpbController extends Controller
         $totalPpb = PpbHeader::count();
         $totalPending = PpbHeader::where('status', 'pending')->count();
         $totalApproved = PpbHeader::where('status', 'approved')->count();
-        $sumApprovedAmount = PpbHeader::where('status', 'approved')->sum('grand_total');
+        $sumApproved = PpbHeader::where('status', 'approved')->sum('grand_total');
 
         return Inertia::render('Ppb/Index', [
             'ppbs' => $ppbs,
-            'filter' => $request->only('search'),
+            'filters' => $request->only(['search']),
             'stats' => [
-                'totalPpb' => $totalPpb,
-                'totalPending' => $totalPending,
-                'totalApproved' => $totalApproved,
-                'sumApprovedAmount' => $sumApprovedAmount,
-            ],
+                'total' => $totalPpb,
+                'pending' => $totalPending,
+                'approved' => $totalApproved,
+                'sum_approved' => $sumApproved
+            ]
+        ]);
+    }
+
+    public function create(): Response
+    {
+        // Generate Nomor Otomatis (Format: 001/PPB/GKA/I/2026)
+        $bulanRomawi = $this->getRomawi(date('n'));
+        $tahun = date('Y');
+        $count = PpbHeader::whereYear('tanggal', $tahun)->count() + 1;
+        $nomorOtomatis = sprintf("%03d/PPB/GKA/%s/%s", $count, $bulanRomawi, $tahun);
+
+        return Inertia::render('Ppb/Create', [
+            'nomorOtomatis' => $nomorOtomatis
+        ]);
+    }
+
+    public function store(Request $request): RedirectResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'tanggal' => 'required|date',
+            'nomor' => 'required|string|unique:ppb_headers,nomor',
+            'perihal' => 'required|string',
+            'kepada_yth_nama' => 'required|string',
+            'kepada_yth_jabatan' => 'required|string',
+            'kepada_yth_lokasi' => 'required|string',
+            'paragraf_pembuka' => 'nullable|string',
+            'dibuat_oleh_nama' => 'required|string',
+            'dibuat_oleh_jabatan' => 'required|string',
+            'menyetujui_1_nama' => 'nullable|string',
+            'menyetujui_1_jabatan' => 'nullable|string',
+            'menyetujui_2_nama' => 'nullable|string',
+            'menyetujui_2_jabatan' => 'nullable|string',
+            'items' => 'required|array|min:1',
+            'items.*.nama_barang' => 'required|string',
+            'items.*.jumlah' => 'required|numeric|min:1',
+            'items.*.satuan' => 'required|string',
+            'items.*.harga_satuan' => 'required|numeric|min:0',
+        ]);
+
+        if ($validator->fails()) {
+            return back()->withErrors($validator)->withInput();
+        }
+
+        DB::transaction(function () use ($request) {
+            $grandTotal = 0;
+            foreach ($request->items as $item) {
+                $grandTotal += ($item['jumlah'] * $item['harga_satuan']);
+            }
+
+            $ppb = PpbHeader::create(array_merge($request->except('items'), [
+                'grand_total' => $grandTotal,
+                'status' => 'pending'
+            ]));
+
+            foreach ($request->items as $item) {
+                $ppb->items()->create([
+                    'nama_barang' => $item['nama_barang'],
+                    'jumlah' => $item['jumlah'],
+                    'satuan' => $item['satuan'],
+                    'harga_satuan' => $item['harga_satuan'],
+                    'harga_total' => $item['jumlah'] * $item['harga_satuan'],
+                    'keterangan' => $item['keterangan'] ?? '-',
+                ]);
+            }
+        });
+
+        return redirect()->route('ppb.index')->with('message', 'Permohonan Pembelian berhasil dibuat.');
+    }
+
+    public function show(PpbHeader $ppb): Response
+    {
+        $ppb->load('items');
+
+        $ppb->grand_total_formatted = 'Rp ' . number_format($ppb->grand_total, 0, ',', '.');
+
+        return Inertia::render('Ppb/ShowPpb', [
+            'ppb' => $ppb,
             'flash' => [
                 'message' => session('message')
             ]
@@ -57,121 +134,106 @@ class PpbController extends Controller
     }
 
     /**
-     * Menampilkan form untuk membuat PPB baru.
+     * [BARU] Halaman Edit
      */
-    public function create(): Response
+    public function edit(PpbHeader $ppb): Response
     {
-        return Inertia::render('Ppb/CreatePpb');
+        // Cegah edit jika sudah disetujui
+        // if ($ppb->status === 'approved') {
+        //     return redirect()->route('ppb.show', $ppb->id)->with('error', 'Dokumen yang sudah disetujui tidak dapat diedit.');
+        // }
+
+        $ppb->load('items');
+        return Inertia::render('Ppb/Edit', [
+            'ppb' => $ppb
+        ]);
     }
 
     /**
-     * Menyimpan PPB baru (Header dan Items) ke database.
+     * [BARU] Proses Update
      */
-    public function store(Request $request): RedirectResponse
+    public function update(Request $request, PpbHeader $ppb): RedirectResponse
     {
+        // Validasi (Ignore unique number untuk ID sendiri)
         $validator = Validator::make($request->all(), [
             'tanggal' => 'required|date',
-            'nomor' => 'required|string|max:255|unique:ppb_headers,nomor',
-            // ... (validasi lainnya)
+            'nomor' => ['required', 'string', Rule::unique('ppb_headers')->ignore($ppb->id)],
+            'perihal' => 'required|string',
+            'kepada_yth_nama' => 'required|string',
+            'kepada_yth_jabatan' => 'required|string',
+            'kepada_yth_lokasi' => 'required|string',
             'items' => 'required|array|min:1',
-            'items.*.nama_barang' => 'required|string|max:255',
-            // ... (validasi item lainnya)
+            'items.*.nama_barang' => 'required|string',
+            'items.*.jumlah' => 'required|numeric|min:1',
+            'items.*.satuan' => 'required|string',
+            'items.*.harga_satuan' => 'required|numeric|min:0',
         ]);
 
         if ($validator->fails()) {
             return back()->withErrors($validator)->withInput();
         }
 
-        try {
-            DB::beginTransaction();
-
+        DB::transaction(function () use ($request, $ppb) {
+            // Hitung Ulang Grand Total
             $grandTotal = 0;
             foreach ($request->items as $item) {
-                $grandTotal += $item['jumlah'] * $item['harga_satuan'];
+                $grandTotal += ($item['jumlah'] * $item['harga_satuan']);
             }
 
-            $header = PpbHeader::create(
-                array_merge($request->except('items'), [
-                    'grand_total' => $grandTotal
-                    // status akan di-set otomatis oleh Model
-                ])
-            );
+            // Update Header
+            $ppb->update(array_merge($request->except('items'), [
+                'grand_total' => $grandTotal
+            ]));
 
-            foreach ($request->items as $itemData) {
-                $header->items()->create([
-                    'nama_barang' => $itemData['nama_barang'],
-                    'jumlah' => $itemData['jumlah'],
-                    'satuan' => $itemData['satuan'],
-                    'harga_satuan' => $itemData['harga_satuan'],
-                    'harga_total' => $itemData['jumlah'] * $itemData['harga_satuan'],
-                    'keterangan' => $itemData['keterangan'],
+            // Reset Items (Hapus Lama -> Buat Baru)
+            $ppb->items()->delete();
+
+            foreach ($request->items as $item) {
+                $ppb->items()->create([
+                    'nama_barang' => $item['nama_barang'],
+                    'jumlah' => $item['jumlah'],
+                    'satuan' => $item['satuan'],
+                    'harga_satuan' => $item['harga_satuan'],
+                    'harga_total' => $item['jumlah'] * $item['harga_satuan'],
+                    'keterangan' => $item['keterangan'] ?? '-',
                 ]);
             }
+        });
 
-            DB::commit();
-            
-            return redirect()->route('ppb.show', $header->id)->with('message', 'Pengajuan Permintaan Barang berhasil dibuat.');
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return back()->withErrors(['db' => 'Gagal menyimpan data ke database: ' . $e->getMessage()])->withInput();
-        }
+        return redirect()->route('ppb.show', $ppb->id)->with('message', 'Perubahan berhasil disimpan.');
     }
 
-    /**
-     * Menampilkan detail PPB yang sudah dibuat (format surat).
-     */
-    public function show(string $id): Response
-    {
-        $ppb = PpbHeader::with('items')->findOrFail($id);
-
-        return Inertia::render('Ppb/ShowPpb', [
-            'ppb' => $ppb,
-            'flash' => [ // (TAMBAHAN BARU) Kirim flash message ke show
-                'message' => session('message')
-            ]
-        ]);
-    }
-
-    /**
-     * (FUNGSI BARU)
-     * Update status PPB (Approve/Reject).
-     */
     public function updateStatus(Request $request, PpbHeader $ppb): RedirectResponse
     {
         $validator = Validator::make($request->all(), [
             'status' => ['required', Rule::in(['approved', 'rejected'])],
         ]);
 
-        if ($validator->fails()) {
-            return back()->withErrors($validator);
-        }
+        if ($validator->fails()) return back()->withErrors($validator);
 
-        if ($ppb->status !== 'pending') {
-            return back()->withErrors(['status' => 'Pengajuan ini sudah tidak bisa diubah statusnya.']);
-        }
+        // if ($ppb->status !== 'pending') {
+        //     return back()->withErrors(['status' => 'Status tidak bisa diubah lagi.']);
+        // }
 
         $ppb->status = $request->status;
         $ppb->save();
 
-        $message = $request->status === 'approved' ? 'Pengajuan berhasil disetujui.' : 'Pengajuan berhasil ditolak.';
-
-        return redirect()->route('ppb.show', $ppb->id)->with('message', $message);
+        $msg = $request->status === 'approved' ? 'Disetujui.' : 'Ditolak.';
+        return redirect()->route('ppb.show', $ppb->id)->with('message', $msg);
     }
 
-    /**
-     * Menghapus data PPB.
-     */
     public function destroy(PpbHeader $ppb): RedirectResponse
     {
-        // (TAMBAHAN LOGIKA)
-        // Sebaiknya, jangan boleh hapus jika sudah di-approve
         if ($ppb->status === 'approved') {
-            return back()->withErrors(['delete' => 'Pengajuan yang sudah disetujui tidak dapat dihapus.']);
+            return back()->withErrors(['delete' => 'Tidak bisa menghapus dokumen yang sudah disetujui.']);
         }
-        
-        $ppb->delete(); // onDelete('cascade') akan menghapus items
+        $ppb->delete();
+        return redirect()->route('ppb.index')->with('message', 'Data berhasil dihapus.');
+    }
 
-        return redirect()->route('ppb.index')->with('message', 'Pengajuan PPB berhasil dihapus.');
+    private function getRomawi($bulan)
+    {
+        $map = [1=>'I', 2=>'II', 3=>'III', 4=>'IV', 5=>'V', 6=>'VI', 7=>'VII', 8=>'VIII', 9=>'IX', 10=>'X', 11=>'XI', 12=>'XII'];
+        return $map[$bulan] ?? 'I';
     }
 }

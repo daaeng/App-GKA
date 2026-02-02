@@ -24,12 +24,15 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 export default function Gka({
     products, products2, filter, currentMonth, currentYear,
-    tm_sin, tm_slou, tm_sampai, dataSusut, // Cards Stats
-    s_ready, p_ready, klp_ready, // Stok Ready
+    tm_sin, tm_slou, tm_sampai, dataSusut,
+    s_ready, p_ready, klp_ready,
     chartData
 }: any) {
     const [searchTerm, setSearchTerm] = useState(filter.search || '');
-    const [timePeriod, setTimePeriod] = useState(filter.time_period || 'this-month');
+
+    // [PERBAIKAN 1] Ubah default state menjadi 'all-time'
+    const [timePeriod, setTimePeriod] = useState(filter.time_period || 'all-time');
+
     const [selectedMonth, setSelectedMonth] = useState(currentMonth.toString());
     const [selectedYear, setSelectedYear] = useState(currentYear.toString());
     const [productType, setProductType] = useState(filter.product_type || 'all');

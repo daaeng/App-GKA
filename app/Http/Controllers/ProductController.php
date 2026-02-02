@@ -274,13 +274,17 @@ class ProductController extends Controller
 
     public function gka(Request $request)
     {
-        // ... (Isi fungsi gka sama persis dengan yang lama) ...
         $perPage = 20;
         $searchTerm = $request->input('search');
+
+        // [PERBAIKAN 1] Default filter di Backend juga 'all-time'
         $timePeriod = $request->input('time_period', 'all-time');
+
         $selectedMonth = $request->input('month', Carbon::now()->month);
         $selectedYear = $request->input('year', Carbon::now()->year);
         $productType = $request->input('product_type', 'all');
+
+        // ... (Bagian Query Filter Tabel biarkan sama) ...
 
         $baseQuery = Product::query()
             ->when($searchTerm, function ($query, $search) {
@@ -308,12 +312,19 @@ class ProductController extends Controller
             }
         }
 
+        // --- [PERBAIKAN 2] UPDATE LOGIKA GRAFIK ---
+        // Pastikan 'qty_sampai' digunakan untuk Penjualan
         $chartQueryYear = $request->input('year', Carbon::now()->year);
 
         $monthlyStats = Product::selectRaw('
             MONTH(date) as month,
+            -- Produksi (Masuk Gudang GKA): qty_out
             SUM(CASE WHEN status = "gka" AND product = "karet" THEN qty_out ELSE 0 END) as produksi,
+
+            -- Penjualan (Keluar ke Buyer): qty_sampai (Berat Terima Buyer)
+            -- Menggunakan COALESCE agar jika qty_sampai kosong, dianggap 0
             SUM(CASE WHEN status = "buyer" AND product = "karet" THEN COALESCE(qty_sampai, 0) ELSE 0 END) as penjualan,
+
             SUM(CASE WHEN status = "buyer" AND product = "karet" THEN amount_out ELSE 0 END) as pendapatan
         ')
         ->whereYear('date', $chartQueryYear)
@@ -321,6 +332,7 @@ class ProductController extends Controller
         ->orderBy('month')
         ->get();
 
+        // Mapping Data Chart (Tetap sama)
         $chartData = collect(range(1, 12))->map(function ($m) use ($monthlyStats) {
             $stat = $monthlyStats->firstWhere('month', $m);
             return [
@@ -330,6 +342,8 @@ class ProductController extends Controller
                 'Pendapatan' => $stat ? (float)$stat->pendapatan : 0,
             ];
         });
+
+        // ... (Sisa kode seperti query $products, stats card dll biarkan seperti file Anda sebelumnya) ...
 
         $products = $dateFilterQuery->clone()->where('product', 'karet')->where('qty_out', '>', 0)->where('status', 'gka')->orderBy('created_at', 'DESC')->paginate($perPage);
         $product2 = $dateFilterQuery->clone()->where('product', 'karet')->where('qty_out', '>', 0)->where('status', 'buyer')->orderBy('created_at', 'DESC')->paginate($perPage);
@@ -347,6 +361,7 @@ class ProductController extends Controller
         $product6 = $dateFilterQuery->clone()->where('product', 'kelapa')->where('qty_out', '>', 0)->where('status', 'buyer')->orderBy('created_at', 'DESC')->paginate($perPage);
         $product6->getCollection()->transform(function ($item) { $item->susut_value = $item->qty_out - ($item->qty_sampai ?? 0); return $item; });
 
+        // Logic Statistik Cards
         $statsQuery = Product::query()
              ->when($searchTerm, function ($query, $search) {
                 $query->where(function($q) use ($search) {

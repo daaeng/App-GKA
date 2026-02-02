@@ -174,7 +174,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/requests/{requested}/showAct', [RequestController::class, 'showAct'])->name('requests.showAct')->middleware("permission:requests.view");
 
     // PPB
-    Route::resource('ppb', PpbController::class)->only(['index', 'create', 'store', 'show', 'destroy'])->middleware("permission:requests.view");
+    // [TAMBAHAN] Route Edit & Update (Agar tombol Edit berfungsi)
+    Route::get('/ppb/{ppb}/edit', [PpbController::class, 'edit'])->name('ppb.edit')->middleware("permission:requests.edit");
+    Route::put('/ppb/{ppb}', [PpbController::class, 'update'])->name('ppb.update')->middleware("permission:requests.edit");
+
+    // Resource standar (Index, Create, Store, Show, Destroy)
+    Route::resource('ppb', PpbController::class)
+        ->only(['index', 'create', 'store', 'show', 'destroy'])
+        ->middleware("permission:requests.view");
+
     Route::patch('/ppb/{ppb}/status', [PpbController::class, 'updateStatus'])->name('ppb.updateStatus')->middleware("permission:requests.edit");
 
     // Nota / Invoice
